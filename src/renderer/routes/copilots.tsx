@@ -9,10 +9,13 @@ import {
   Button,
   ButtonGroup,
   Divider,
+  FormControl,
   FormControlLabel,
   FormGroup,
   IconButton,
+  InputLabel,
   MenuItem,
+  Select,
   Switch,
   TextField,
   Typography,
@@ -34,6 +37,14 @@ import * as remote from '@/packages/remote'
 import platform from '@/platform'
 import * as atoms from '@/stores/atoms'
 import type { CopilotDetail } from '../../shared/types'
+
+// 定义分类选项
+const COPILOT_CATEGORIES = {
+  CHARACTER: 'Character',
+} as const
+
+// Character分类的默认prompt模板
+const CHARACTER_DEFAULT_PROMPT = '你是一个有趣的AI助手，拥有独特的个性。请用友好、幽默的方式与用户交流，展现你的个性特点。'
 
 export const Route = createFileRoute('/copilots')({
   component: Copilots,
@@ -405,6 +416,19 @@ function CopilotForm(props: CopilotFormProps) {
       setCopilotEdit({ ...copilotEdit, [field]: event.target.value })
     }
   }
+  
+  const handleCategoryChange = (event: any) => {
+    const category = event.target.value
+    const updatedCopilot = { ...copilotEdit, category }
+    
+    // 如果选择Character分类，自动填充默认prompt
+    if (category === COPILOT_CATEGORIES.CHARACTER && !copilotEdit.prompt) {
+      updatedCopilot.prompt = CHARACTER_DEFAULT_PROMPT
+    }
+    
+    setCopilotEdit(updatedCopilot)
+    setHelperTexts({ name: <></>, prompt: <></> })
+  }
   const save = () => {
     copilotEdit.name = copilotEdit.name.trim()
     copilotEdit.prompt = copilotEdit.prompt.trim()
@@ -447,6 +471,21 @@ function CopilotForm(props: CopilotFormProps) {
         onChange={inputHandler('name')}
         helperText={helperTexts.name}
       />
+      <FormControl fullWidth margin="dense" variant="outlined">
+        <InputLabel>{t('Copilot Category')}</InputLabel>
+        <Select
+          value={copilotEdit.category || ''}
+          onChange={handleCategoryChange}
+          label={t('Copilot Category')}
+        >
+          <MenuItem value="">
+            <em>{t('None')}</em>
+          </MenuItem>
+          <MenuItem value={COPILOT_CATEGORIES.CHARACTER}>
+            {t('Character')}
+          </MenuItem>
+        </Select>
+      </FormControl>
       <TextField
         margin="dense"
         label={t('Copilot Prompt')}
@@ -497,9 +536,10 @@ export async function getEmptyCopilot(): Promise<CopilotDetail> {
     id: `${conf.uuid}:${uuidv4()}`,
     name: '',
     picUrl: '',
-    prompt: '',
+    prompt: CHARACTER_DEFAULT_PROMPT,
     starred: false,
     usedCount: 0,
     shared: true,
+    category: COPILOT_CATEGORIES.CHARACTER,
   }
 }

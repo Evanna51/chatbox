@@ -148,6 +148,38 @@ function RouteComponent() {
           {t('Chatbox OCRs images with this model and sends the text to models without image support.')}
         </Text>
       </Stack>
+
+      <Stack gap="xs">
+        <Text fw={600}>{t('Summary Model')}</Text>
+
+        <ModelSelector
+          position="bottom-start"
+          width={320}
+          showAuto={true}
+          autoText={t('Auto (Use Chat Model)')!}
+          onSelect={(provider, model) =>
+            setSettings({
+              summaryModel:
+                provider && model
+                  ? {
+                      provider,
+                      model,
+                    }
+                  : undefined,
+            })
+          }
+        >
+          <ModelSelectContent
+            autoText={t('Auto (Use Chat Model)')!}
+            provider={settings.summaryModel?.provider}
+            model={settings.summaryModel?.model}
+          />
+        </ModelSelector>
+
+        <Text c="chatbox-tertiary" size="xs">
+          {t('Chatbox will use this model to automatically summarize conversation history when context becomes too long.')}
+        </Text>
+      </Stack>
     </Stack>
   )
 }

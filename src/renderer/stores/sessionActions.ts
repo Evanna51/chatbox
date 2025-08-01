@@ -11,6 +11,7 @@ import { formatChatAsHtml, formatChatAsMarkdown, formatChatAsTxt } from '@/lib/f
 import * as appleAppStore from '@/packages/apple_app_store'
 import * as localParser from '@/packages/local-parser'
 import { generateImage, generateText, streamText } from '@/packages/model-calls'
+import { shouldTriggerSummary, summarizeMessages, createSummaryContextMessage } from '@/packages/model-calls/summarize'
 import { getModelDisplayName } from '@/packages/model-setting-utils'
 import * as remote from '@/packages/remote'
 import { estimateTokensFromMessages } from '@/packages/token'
@@ -1110,6 +1111,9 @@ async function genMessageContext(settings: Settings, msgs: Message[]) {
   const {
     // openaiMaxContextTokens,
     maxContextMessageCount,
+    autoSummarize,
+    autoSummarizeMessageThreshold,
+    autoSummarizeTokenThreshold,
   } = settings
   if (msgs.length === 0) {
     throw new Error('No messages to replay')
@@ -1117,6 +1121,59 @@ async function genMessageContext(settings: Settings, msgs: Message[]) {
   if (maxContextMessageCount === undefined) {
     throw new Error('maxContextMessageCount is not set')
   }
+
+  // 检查是否需要触发自动总结
+  if (shouldTriggerSummary(msgs, {
+    autoSummarize,
+    autoSummarizeMessageThreshold,
+    autoSummarizeTokenThreshold,
+  })) {
+    try {
+      // 创建模型依赖和获取模型实例
+      const dependencies = await createModelDependencies()
+      const configs = { uuid: '' } // 空配置，因为总结功能不需要特定配置
+      
+      // 使用指定的总结模型，如果没有配置则使用当前对话模型
+      const summarySettings = settings.summaryModel ? {
+        ...settings,
+        provider: settings.summaryModel.provider,
+        modelId: settings.summaryModel.model,
+      } : settings
+      
+      const model = getModel(summarySettings, configs, dependencies)
+      
+      // 分离系统消息和历史对话
+      const head = msgs[0].role === 'system' ? msgs[0] : undefined
+      const conversationMsgs = head ? msgs.slice(1) : msgs
+      
+      // 只总结前面的消息，保留最近的几条消息不被总结
+      const keepRecentCount = Math.min(3, Math.floor(conversationMsgs.length / 2))
+      const messagesToSummarize = conversationMsgs.slice(0, -keepRecentCount)
+      const recentMessages = conversationMsgs.slice(-keepRecentCount)
+      
+      if (messagesToSummarize.length > 0) {
+        console.log(`Auto-summarizing ${messagesToSummarize.length} messages, keeping ${recentMessages.length} recent messages`)
+        
+        // 生成总结
+        const summaryData = await summarizeMessages(model, messagesToSummarize)
+        const summaryMessage = createSummaryContextMessage(summaryData)
+        
+        // 构建新的消息列表：系统消息 + 总结消息 + 最近的消息
+        const newMsgs = [
+          ...(head ? [head] : []),
+          summaryMessage,
+          ...recentMessages,
+        ]
+        
+        console.log(`Context optimized: ${msgs.length} messages -> ${newMsgs.length} messages (including summary)`)
+        msgs = newMsgs
+      }
+    } catch (error) {
+      console.error('Auto-summarization failed, using original messages:', error)
+      // 如果总结失败，继续使用原始消息列表
+    }
+  }
+
   const head = msgs[0].role === 'system' ? msgs[0] : undefined
   if (head) {
     msgs = msgs.slice(1)

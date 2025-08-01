@@ -184,6 +184,9 @@ export type SessionSettings = Partial<{
   dalleStyle: 'vivid' | 'natural'
   imageGenerateNum: number // 生成图片的数量
   providerOptions?: ProviderOptions
+  autoSummarize: boolean // 启用自动总结功能
+  autoSummarizeMessageThreshold: number // 触发总结的消息数量阈值
+  autoSummarizeTokenThreshold: number // 触发总结的token数量阈值
 }>
 
 export interface Session {
@@ -393,6 +396,10 @@ export interface Settings extends SessionSettings {
     provider: ModelProvider | string
     model: string
   }
+  summaryModel?: {
+    provider: ModelProvider | string
+    model: string
+  }
 
   // chatboxai
   licenseKey?: string
@@ -528,6 +535,7 @@ export interface CopilotDetail {
   starred?: boolean
   usedCount: number
   shared?: boolean
+  category?: string
 }
 
 export interface Toast {

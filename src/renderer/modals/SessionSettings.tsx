@@ -639,6 +639,67 @@ export function ChatConfig({
         </Stack>
       )}
 
+      {/* Auto-Summarize Settings */}
+      <Stack gap="xs" py="xs">
+        <Flex align="center" justify="space-between" gap="xs">
+          <Flex align="center" gap="xs">
+            <Text size="sm" fw="600">
+              {t('Auto-Summarize Conversations')}
+            </Text>
+            <Tooltip
+              label={t('Automatically summarize conversation history when context becomes too long to optimize performance')}
+              withArrow={true}
+              maw={320}
+              className="!whitespace-normal"
+              zIndex={3000}
+              events={{ hover: true, focus: true, touch: true }}
+            >
+              <IconInfoCircle size={16} className="text-[var(--mantine-color-chatbox-tertiary-text)]" />
+            </Tooltip>
+          </Flex>
+          <Switch
+            checked={settings?.autoSummarize ?? globalSettings?.autoSummarize ?? false}
+            onChange={(v) => onSettingsChange({ autoSummarize: v.target.checked })}
+          />
+        </Flex>
+        
+        {(settings?.autoSummarize ?? globalSettings?.autoSummarize) && (
+          <Stack gap="xs" ml="sm">
+            <Flex align="center" justify="space-between" gap="xs">
+              <Text size="xs" c="chatbox-tertiary">
+                {t('Message Threshold')}
+              </Text>
+              <LazyNumberInput
+                width={80}
+                value={settings?.autoSummarizeMessageThreshold}
+                onChange={(v) => onSettingsChange({ autoSummarizeMessageThreshold: typeof v === 'number' ? v : undefined })}
+                min={2}
+                max={20}
+                step={1}
+                allowDecimal={false}
+                placeholder={(globalSettings?.autoSummarizeMessageThreshold ?? 4).toString()}
+              />
+            </Flex>
+            
+            <Flex align="center" justify="space-between" gap="xs">
+              <Text size="xs" c="chatbox-tertiary">
+                {t('Token Threshold')}
+              </Text>
+              <LazyNumberInput
+                width={80}
+                value={settings?.autoSummarizeTokenThreshold}
+                onChange={(v) => onSettingsChange({ autoSummarizeTokenThreshold: typeof v === 'number' ? v : undefined })}
+                min={500}
+                max={10000}
+                step={100}
+                allowDecimal={false}
+                placeholder={(globalSettings?.autoSummarizeTokenThreshold ?? 1000).toString()}
+              />
+            </Flex>
+          </Stack>
+        )}
+      </Stack>
+
       <Stack>
         {settings?.provider === ModelProviderEnum.Claude && (
           <ClaudeProviderConfig settings={settings} onSettingsChange={onSettingsChange} />

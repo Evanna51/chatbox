@@ -155,6 +155,9 @@ export function chatSessionSettings(): SessionSettings {
     provider: ModelProviderEnum.ChatboxAI,
     modelId: 'chatboxai-4',
     maxContextMessageCount: 6,
+    autoSummarize: false, // 默认关闭自动总结
+    autoSummarizeMessageThreshold: 20, // 超过4条消息时触发
+    autoSummarizeTokenThreshold: 1000, // 超过1000 tokens时触发
   }
 }
 

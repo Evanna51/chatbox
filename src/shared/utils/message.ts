@@ -186,3 +186,20 @@ export function sequenceMessages(msgs: Message[]): Message[] {
   }
   return ret
 }
+
+/**
+ * 生成对话历史的总结，用于压缩上下文
+ */
+export function createSummaryMessage(summaryContent: string): Message {
+  return {
+    id: `summary-${Date.now()}`,
+    role: 'system',
+    contentParts: [
+      {
+        type: 'text',
+        text: `[对话历史总结]\n${summaryContent}`,
+      },
+    ],
+    timestamp: Date.now(),
+  }
+}
