@@ -17,12 +17,7 @@ export function formatChatAsMarkdown(sessionName: string, threads: SessionThread
     content += '\n\n'
   }
   content += '--------------------\n\n'
-  content += `
-<a href="https://chatboxai.app" style="display: flex; align-items: center;">
-<img src='https://chatboxai.app/icon.png' style='width: 40px; height: 40px; padding-right: 6px'>
-<b style='font-size:30px'>Chatbox AI</b>
-</a>
-`
+  content += ``
   return content
 }
 
@@ -38,7 +33,6 @@ export function formatChatAsTxt(sessionName: string, threads: SessionThread[]) {
     content += '\n\n\n\n'
   }
   content += `========================================================================\n\n`
-  content += `Chatbox AI (https://chatboxai.app)`
   return content
 }
 
@@ -56,22 +50,40 @@ export async function formatChatAsHtml(sessionName: string, threads: SessionThre
       }
       for (const p of msg.contentParts) {
         if (p.type === 'text') {
-          content += ReactDOMServer.renderToStaticMarkup(<Markdown hiddenCodeCopyButton>{p.text}</Markdown>)
+          try {
+            content += ReactDOMServer.renderToStaticMarkup(<Markdown hiddenCodeCopyButton>{p.text}</Markdown>)
+          } catch (error) {
+            console.warn('HTML导出时Markdown渲染失败，降级为纯文本:', error)
+            // 降级处理：如果Markdown渲染失败，就使用简单的HTML转义
+            const escapedText = p.text
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#x27;')
+              .replace(/\n/g, '<br>')
+            content += `<div class="whitespace-pre-wrap">${escapedText}</div>\n`
+          }
         } else if (p.type === 'image') {
           if (p.storageKey) {
             let url = ''
-            const b64 = await storage.getBlob(p.storageKey)
-            if (b64) {
-              let { type, data } = base64.parseImage(b64)
-              if (type === '') {
-                type = 'image/png'
-                data = b64
+            try {
+              const b64 = await storage.getBlob(p.storageKey)
+              if (b64) {
+                let { type, data } = base64.parseImage(b64)
+                if (type === '') {
+                  type = 'image/png'
+                  data = b64
+                }
+                url = `data:${type};base64,${data}`
+              } else if ('url' in p) {
+                url = p.url as string
               }
-              url = `data:${type};base64,${data}`
-            } else if ('url' in p) {
-              url = p.url as string
+              content += `<img src="${url}" class="my-2" />\n`
+            } catch (error) {
+              console.warn('HTML导出时图片处理失败:', error)
+              content += `<p class="text-red-500">[图片加载失败]</p>\n`
             }
-            content += `<img src="${url}" class="my-2" />\n`
           }
         }
       }
@@ -115,4 +127,8 @@ export async function formatChatAsHtml(sessionName: string, threads: SessionThre
 </body>
 </html>
 `
+}
+
+export function formatChatAsJson(sessionName: string, threads: SessionThread[]) {
+  return JSON.stringify(threads, null, 2)
 }

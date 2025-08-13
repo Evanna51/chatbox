@@ -44,6 +44,7 @@ import * as atoms from '@/stores/atoms'
 import * as sessionActions from '@/stores/sessionActions'
 import { saveSession } from '@/stores/sessionStorageMutations'
 import { getMessageText } from '@/utils/message'
+import { isCharacterCopilotSession } from '@/packages/memory-collector'
 
 const SessionSettingsModal = NiceModal.create(
   ({ session, disableAutoSave = false }: { session: Session; disableAutoSave?: boolean }) => {
@@ -51,6 +52,7 @@ const SessionSettingsModal = NiceModal.create(
     const { t } = useTranslation()
     const isSmallScreen = useIsSmallScreen()
     const globalSettings = useAtomValue(atoms.settingsAtom)
+    const allCopilots = useAtomValue(atoms.myCopilotsAtom)
     const theme = useTheme()
 
     const [editingData, setEditingData] = useState<Session | null>(session || null)
@@ -123,6 +125,18 @@ const SessionSettingsModal = NiceModal.create(
       }
       if (!disableAutoSave) {
         saveSession(editingData)
+        
+        // 处理主动通知的启用/禁用
+        const isCharacterSession = isCharacterCopilotSession(editingData, allCopilots)
+        if (isCharacterSession) {
+          import('@/packages/proactive-notification').then(({ scheduleSessionNotification, cancelSessionNotification }) => {
+            if (editingData.settings?.enableProactiveNotification) {
+              scheduleSessionNotification(editingData.id)
+            } else {
+              cancelSessionNotification(editingData.id)
+            }
+          })
+        }
       }
       // setChatConfigDialogSessionId(null)
       modal.resolve(editingData)
@@ -236,6 +250,7 @@ const SessionSettingsModal = NiceModal.create(
                 <ChatConfig
                   settings={editingData.settings}
                   globalSettings={globalSettings}
+                  session={editingData}
                   onSettingsChange={(d) =>
                     setEditingData((_data) => {
                       if (_data) {
@@ -537,12 +552,18 @@ export function ChatConfig({
   settings,
   onSettingsChange,
   globalSettings,
+  session,
 }: {
   settings: Session['settings']
   globalSettings: Settings
   onSettingsChange: (data: Session['settings']) => void
+  session?: Session
 }) {
   const { t } = useTranslation()
+  const copilots = useAtomValue(atoms.myCopilotsAtom)
+  
+  // 检查是否是Character类型的会话
+  const isCharacterSession = session ? isCharacterCopilotSession(session, copilots) : false
 
   return (
     <Stack gap="md">
@@ -699,6 +720,33 @@ export function ChatConfig({
           </Stack>
         )}
       </Stack>
+
+      {/* Proactive Notification Settings - Only for Character sessions */}
+      {isCharacterSession && (
+        <Stack gap="xs" py="xs">
+          <Flex align="center" justify="space-between" gap="xs">
+            <Flex align="center" gap="xs">
+              <Text size="sm" fw="600">
+                {t('Proactive Notifications')}
+              </Text>
+              <Tooltip
+                label={t('Enable AI to proactively send messages during lunch time (11:00-13:00) when no activity for 5 minutes')}
+                withArrow={true}
+                maw={320}
+                className="!whitespace-normal"
+                zIndex={3000}
+                events={{ hover: true, focus: true, touch: true }}
+              >
+                <IconInfoCircle size={16} className="text-[var(--mantine-color-chatbox-tertiary-text)]" />
+              </Tooltip>
+            </Flex>
+            <Switch
+              checked={settings?.enableProactiveNotification ?? false}
+              onChange={(v) => onSettingsChange({ enableProactiveNotification: v.target.checked })}
+            />
+          </Flex>
+        </Stack>
+      )}
 
       <Stack>
         {settings?.provider === ModelProviderEnum.Claude && (

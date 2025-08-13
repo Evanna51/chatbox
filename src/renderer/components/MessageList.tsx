@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 import * as atoms from '@/stores/atoms'
 import * as scrollActions from '@/stores/scrollActions'
 import * as sessionActions from '@/stores/sessionActions'
+import { MobilePerformanceMonitor, getOptimalPerformanceConfig } from '@/utils/mobile-performance'
 import { ConfirmDeleteMenuItem } from './ConfirmDeleteButton'
 import Message from './Message'
 import StyledMenu from './StyledMenu'
@@ -30,6 +31,12 @@ export default function MessageList(props: { className?: string; currentSession:
   const isSmallScreen = useIsSmallScreen()
 
   const currentMessageList = useAtomValue(atoms.currentMessageListAtom)
+  
+  // 性能监控
+  const performanceMonitor = useRef(MobilePerformanceMonitor.getInstance())
+  const [performanceConfig] = useState(() => getOptimalPerformanceConfig(
+    isSmallScreen ? 'mobile' : 'desktop'
+  ))
   const currentThreadHash = useAtomValue(atoms.currentThreadHistoryHashAtom)
   const virtuoso = useRef<VirtuosoHandle>(null)
   const messageListRef = useRef<HTMLDivElement>(null)
@@ -57,6 +64,16 @@ export default function MessageList(props: { className?: string; currentSession:
   useEffect(() => {
     setMessageListElement(messageListRef)
   }, [])
+  
+  // 性能监控生命周期
+  useEffect(() => {
+    if (isSmallScreen) {
+      performanceMonitor.current.startMonitoring()
+      return () => {
+        performanceMonitor.current.stopMonitoring()
+      }
+    }
+  }, [isSmallScreen])
 
   const [threadMenuAnchorEl, setThreadMenuAnchorEl] = useState<null | HTMLElement>(null)
   const [threadMenuClickedTopicId, setThreadMenuClickedTopicId] = useState<null | string>(null)
@@ -90,7 +107,7 @@ export default function MessageList(props: { className?: string; currentSession:
             : {
                 initialTopMostItemIndex: currentMessageList.length - 1,
               })}
-          increaseViewportBy={{ top: 2000, bottom: 2000 }}
+          increaseViewportBy={performanceConfig.viewportBuffer}
           itemContent={(index, msg) => {
             return (
               <Fragment key={msg.id}>

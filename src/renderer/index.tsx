@@ -30,6 +30,9 @@ import './setup/sentry_init'
 // 全局错误处理
 import './setup/global_error_handler'
 
+// 主动通知服务初始化
+import './setup/proactive_notification_bootstrap'
+
 // GA4 初始化
 import './setup/ga_init'
 

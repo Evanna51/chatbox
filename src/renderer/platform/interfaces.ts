@@ -50,6 +50,7 @@ export interface Platform {
 
   // 通知
   shouldShowAboutDialogWhenStartUp(): Promise<boolean>
+  sendProactiveNotification?(title: string, body: string, sessionId?: string): Promise<void>
 
   appLog(level: string, message: string): Promise<void>
 

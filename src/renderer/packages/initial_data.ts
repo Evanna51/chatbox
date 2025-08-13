@@ -293,7 +293,6 @@ export const defaultSessionsForCN: Session[] = [
     starred: false,
     copilotId: 'chatbox-featured:21',
   },
-  ...defaultSessionsForEN,
 ]
 
 export const imageCreatorSessionForCN: Session = {
@@ -1030,5 +1029,6 @@ mindmap
   threads: [],
 }
 
-defaultSessionsForCN.unshift(imageCreatorSessionForCN, artifactSessionCN, mermaidSessionCN)
+// imageCreatorSessionForCN imageCreatorSessionForCN mermaidSessionCN
+// defaultSessionsForCN.unshift()
 defaultSessionsForEN.unshift(imageCreatorSessionForEN, artifactSessionEN, mermaidSessionEN)

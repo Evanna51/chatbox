@@ -133,13 +133,14 @@ export interface Message {
   timestamp?: number // 当前消息的时间戳
   firstTokenLatency?: number // AI 回答首字耗时(毫秒) - 从发送请求到接收到第一个字的时间间隔
   finishReason?: FinishReason // 生成当前消息的结束原因
+  isProactive?: boolean // 是否为主动发起的消息（Character AI主动通知）
 }
 
 export type SettingWindowTab = 'ai' | 'display' | 'chat' | 'advanced' | 'extension' | 'mcp'
 
 export type ExportChatScope = 'all_threads' | 'current_thread'
 
-export type ExportChatFormat = 'Markdown' | 'TXT' | 'HTML'
+export type ExportChatFormat = 'Markdown' | 'TXT' | 'HTML' | 'JSON'
 
 export type SessionType = 'chat' | 'picture'
 
@@ -187,6 +188,7 @@ export type SessionSettings = Partial<{
   autoSummarize: boolean // 启用自动总结功能
   autoSummarizeMessageThreshold: number // 触发总结的消息数量阈值
   autoSummarizeTokenThreshold: number // 触发总结的token数量阈值
+  enableProactiveNotification: boolean // 启用主动通知功能（仅对Character类型会话有效）
 }>
 
 export interface Session {
@@ -430,6 +432,7 @@ export interface Settings extends SessionSettings {
   proxy?: string // 代理地址
 
   allowReportingAndTracking: boolean // 是否允许错误报告和事件追踪
+  enablePerformanceMonitoring: boolean // 是否启用性能监控
 
   userAvatarKey?: string // 用户头像的 key
   defaultAssistantAvatarKey?: string // 默认助手头像的 key
@@ -529,6 +532,8 @@ export interface CopilotDetail {
   id: string
   name: string
   picUrl?: string
+  avatarKey?: string // 头像存储key，用于本地上传的图片
+  avatarEmoji?: string // 头像emoji
   prompt: string
   demoQuestion?: string
   demoAnswer?: string

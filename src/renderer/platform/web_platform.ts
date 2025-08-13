@@ -7,15 +7,19 @@ import { sliceTextByTokenLimit } from '@/packages/token'
 import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
+import SimpleMobileKnowledgeBaseController from './knowledge-base/simple-mobile-controller'
 import WebExporter from './web_exporter'
+import MobileExporter from './mobile_exporter'
 import { parseTextFileLocally } from './web_platform_utils'
+import { CHATBOX_BUILD_TARGET } from '../variables'
 
 const store = localforage.createInstance({ name: 'chatboxstore' })
 
 export default class WebPlatform implements Platform {
-  public type: PlatformType = 'web'
+  public type: PlatformType = CHATBOX_BUILD_TARGET === 'mobile_app' ? 'mobile' : 'web'
 
-  public exporter = new WebExporter()
+  public exporter = CHATBOX_BUILD_TARGET === 'mobile_app' ? new MobileExporter() : new WebExporter()
+  private _kbController?: SimpleMobileKnowledgeBaseController
 
   constructor() {}
 
@@ -187,7 +191,71 @@ export default class WebPlatform implements Platform {
     throw new Error('Method not implemented.')
   }
 
+  public async sendProactiveNotification(title: string, body: string, sessionId?: string): Promise<void> {
+    if (this.type === 'mobile') {
+      // 使用Capacitor的LocalNotifications
+      try {
+        const { LocalNotifications } = await import('@capacitor/local-notifications')
+        
+        // 请求通知权限
+        const permission = await LocalNotifications.requestPermissions()
+        if (permission.display !== 'granted') {
+          console.warn('[ProactiveNotification] Notification permission not granted')
+          return
+        }
+
+        // 发送本地通知
+        await LocalNotifications.schedule({
+          notifications: [
+            {
+              title,
+              body,
+              id: Date.now(),
+              schedule: { at: new Date() },
+              sound: 'default',
+              attachments: [],
+              actionTypeId: '',
+              extra: sessionId ? { sessionId } : {}
+            }
+          ]
+        })
+      } catch (error) {
+        console.error('[ProactiveNotification] Error sending mobile notification:', error)
+        // 在移动端，如果通知失败不应该阻止应用运行
+        return
+      }
+    } else {
+      // Web端使用浏览器的Notification API
+      try {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(title, {
+            body,
+            icon: '/favicon.ico'
+          })
+        } else if ('Notification' in window && Notification.permission !== 'denied') {
+          // 请求权限
+          const permission = await Notification.requestPermission()
+          if (permission === 'granted') {
+            new Notification(title, {
+              body,
+              icon: '/favicon.ico'
+            })
+          }
+        }
+      } catch (error) {
+        console.error('[ProactiveNotification] Error sending web notification:', error)
+      }
+    }
+  }
+
   public getKnowledgeBaseController(): KnowledgeBaseController {
-    throw new Error('Method not implemented.')
+    if (CHATBOX_BUILD_TARGET === 'mobile_app') {
+      if (!this._kbController) {
+        this._kbController = new SimpleMobileKnowledgeBaseController()
+      }
+      return this._kbController
+    } else {
+      throw new Error('Knowledge base not supported on web platform')
+    }
   }
 }

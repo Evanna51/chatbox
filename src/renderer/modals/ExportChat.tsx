@@ -19,16 +19,27 @@ const ExportChat = NiceModal.create(() => {
   const modal = useModal()
   const { t } = useTranslation()
   const [scope, setScope] = useState<ExportChatScope>('all_threads')
-  const [format, setFormat] = useState<ExportChatFormat>('HTML')
+  const [format, setFormat] = useState<ExportChatFormat>('TXT')
+  const [isExporting, setIsExporting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const onCancel = () => {
     modal.resolve()
     modal.hide()
   }
-  const onExport = () => {
-    sessionActions.exportCurrentSessionChat(scope, format)
-    modal.resolve()
-    modal.hide()
+  const onExport = async () => {
+    try {
+      setIsExporting(true)
+      setError(null)
+      await sessionActions.exportCurrentSessionChat(scope, format)
+      modal.resolve()
+      modal.hide()
+    } catch (error) {
+      console.error('导出失败:', error)
+      setError(error instanceof Error ? error.message : '导出失败，请重试')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   return (
@@ -51,6 +62,7 @@ const ExportChat = NiceModal.create(() => {
             onChange={(event) => {
               setScope(event.target.value as any)
             }}
+            disabled={isExporting}
           >
             {['all_threads', 'current_thread'].map((scope) => (
               <MenuItem key={scope} value={scope}>
@@ -68,18 +80,26 @@ const ExportChat = NiceModal.create(() => {
             onChange={(event) => {
               setFormat(event.target.value as any)
             }}
+            disabled={isExporting}
           >
-            {['HTML', 'TXT', 'Markdown'].map((format) => (
+            {['HTML', 'TXT', 'Markdown', 'JSON'].map((format) => (
               <MenuItem key={format} value={format}>
                 {format}
               </MenuItem>
             ))}
           </Select>
         </FormControl>
+        {error && (
+          <div style={{ color: 'red', marginTop: '16px', fontSize: '14px' }}>
+            {error}
+          </div>
+        )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onCancel}>{t('cancel')}</Button>
-        <Button onClick={onExport}>{t('export')}</Button>
+        <Button onClick={onCancel} disabled={isExporting}>{t('cancel')}</Button>
+        <Button onClick={onExport} disabled={isExporting}>
+          {isExporting ? t('Exporting...') : t('export')}
+        </Button>
       </DialogActions>
     </Dialog>
   )

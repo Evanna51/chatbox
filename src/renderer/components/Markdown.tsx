@@ -41,41 +41,61 @@ export default function Markdown(props: {
     className,
     generating,
   } = props
-  return useMemo(
-    () => (
-      <ReactMarkdown
-        remarkPlugins={enableLaTeXRendering ? [remarkGfm, remarkMath, remarkBreaks] : [remarkGfm, remarkBreaks]}
-        rehypePlugins={[rehypeKatex]}
-        className={`break-words ${className || ''}`}
-        // react-markdown 默认的 defaultUrlTransform 会错误地编码 URL 中的 Query，比如 & 会被编码成 &amp;
-        // 这里改用 sanitizeUrl 库，同时也可以避免 XSS 攻击
-        urlTransform={(url) => sanitizeUrl(url)}
-        components={{
-          code: (props: any) =>
-            CodeRenderer({
-              ...props,
-              hiddenCodeCopyButton,
-              enableMermaidRendering,
-              generating,
-              preferCollapsedCodeBlock,
-            }),
-          a: ({ node, ...props }) => (
-            <a
-              {...props}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => {
-                e.stopPropagation()
-              }}
-            />
-          ),
-        }}
-      >
-        {enableLaTeXRendering ? latex.processLaTeX(children) : children}
-      </ReactMarkdown>
-    ),
-    [children, enableLaTeXRendering, enableMermaidRendering, generating]
-  )
+  return useMemo(() => {
+    // 安全检查：防止超长内容导致渲染错误
+    const maxSafeLength = 500000 // 500k字符限制
+    let processedChildren = children
+    
+    if (children.length > maxSafeLength) {
+      processedChildren = children.slice(0, maxSafeLength) + '\n\n... (内容已截断以提高性能)'
+      console.warn(`Markdown: Content truncated from ${children.length} to ${maxSafeLength} characters`)
+    }
+    
+    try {
+      return (
+        <ReactMarkdown
+          remarkPlugins={enableLaTeXRendering ? [remarkGfm, remarkMath, remarkBreaks] : [remarkGfm, remarkBreaks]}
+          rehypePlugins={[rehypeKatex]}
+          className={`break-words ${className || ''}`}
+          // react-markdown 默认的 defaultUrlTransform 会错误地编码 URL 中的 Query，比如 & 会被编码成 &amp;
+          // 这里改用 sanitizeUrl 库，同时也可以避免 XSS 攻击
+          urlTransform={(url) => sanitizeUrl(url)}
+          components={{
+            code: (props: any) =>
+              CodeRenderer({
+                ...props,
+                hiddenCodeCopyButton,
+                enableMermaidRendering,
+                generating,
+                preferCollapsedCodeBlock,
+              }),
+            a: ({ node, ...props }) => (
+              <a
+                {...props}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(e) => {
+                  e.stopPropagation()
+                }}
+              />
+            ),
+          }}
+        >
+          {enableLaTeXRendering ? latex.processLaTeX(processedChildren) : processedChildren}
+        </ReactMarkdown>
+      )
+    } catch (error) {
+      // 如果渲染失败，显示纯文本内容
+      console.error('Markdown rendering failed:', error)
+      return (
+        <div className={`break-words ${className || ''}`}>
+          <pre style={{ whiteSpace: 'pre-wrap', fontSize: 'inherit' }}>
+            {processedChildren}
+          </pre>
+        </div>
+      )
+    }
+  }, [children, enableLaTeXRendering, enableMermaidRendering, generating, hiddenCodeCopyButton, preferCollapsedCodeBlock, className])
 }
 
 export function CodeRenderer(props: {

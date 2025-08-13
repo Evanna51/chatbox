@@ -153,6 +153,15 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       return `${modelInfo?.nickname || model.modelId}`
     }, [providers, model, t])
 
+    // 小屏幕上显示简短的模型名称（只保留最后一个/后的内容）
+    const shortModelDisplayText = useMemo(() => {
+      if (!modelSelectorDisplayText || modelSelectorDisplayText === t('Select Model')) {
+        return modelSelectorDisplayText
+      }
+      const parts = modelSelectorDisplayText.split('/')
+      return parts[parts.length - 1]
+    }, [modelSelectorDisplayText, t])
+
     const [showSelectModelErrorTip, setShowSelectModelErrorTip] = useState(false)
     useEffect(() => {
       if (showSelectModelErrorTip) {
@@ -700,6 +709,22 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     <IconWorld strokeWidth={1.8} />
                   </ActionIcon>
 
+                  {featureFlags.knowledgeBase && (
+                    <KnowledgeBaseMenu currentKnowledgeBaseId={knowledgeBase?.id} onSelect={handleKnowledgeBaseSelect}>
+                      <ActionIcon
+                        variant="transparent"
+                        w={20}
+                        h={20}
+                        miw={20}
+                        mih={20}
+                        bd="none"
+                        color={knowledgeBase ? 'chatbox-brand' : 'chatbox-secondary'}
+                      >
+                        <IconVocabulary strokeWidth={1.8} />
+                      </ActionIcon>
+                    </KnowledgeBaseMenu>
+                  )}
+
                   <ActionIcon
                     variant="transparent"
                     w={20}
@@ -737,14 +762,15 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       gap="xxs"
                       px={isSmallScreen ? 0 : 'xs'}
                       align="center"
+                      justify={isSmallScreen ? "flex-end" : "flex-start"}
                       className={cn('cursor-pointer hover:bg-slate-400/25 rounded-lg', !isSmallScreen && 'py-1')}
                     >
-                      {!!model && <ProviderImageIcon size={isSmallScreen ? 20 : 24} provider={model.provider} />}
+                      {!!model && <ProviderImageIcon size={isSmallScreen ? 16 : 24} provider={model.provider} />}
                       <Text size={isSmallScreen ? 'xs' : 'sm'} className="line-clamp-1">
-                        {modelSelectorDisplayText}
+                        {isSmallScreen ? shortModelDisplayText : modelSelectorDisplayText}
                       </Text>
                       <IconSelector
-                        size={20}
+                        size={isSmallScreen ? 16 : 20}
                         className="flex-[0_0_auto] text-[var(--mantine-color-chatbox-tertiary-text)]"
                       />
                     </Flex>

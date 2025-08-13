@@ -216,10 +216,10 @@ export async function getRerankProvider(kbId: number) {
 
         let apiHost = formattedApiHost
         let token = providerSetting.apiKey
-        if (providerId === 'chatbox-ai') {
-          apiHost = getChatboxAPIOrigin()
-          token = store.get('settings.licenseKey')
-        }
+        // if (providerId === 'chatbox-ai') {
+        //   apiHost = getChatboxAPIOrigin()
+        //   token = store.get('settings.licenseKey')
+        // }
 
         const client = new CohereClient({
           environment: apiHost,

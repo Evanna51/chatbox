@@ -170,6 +170,12 @@ function RouteComponent() {
           checked={settings.allowReportingAndTracking}
           onChange={(e) => setSettings({ allowReportingAndTracking: e.target.checked })}
         />
+
+        <Checkbox
+          label={t('Enable performance monitoring (mobile only)')}
+          checked={settings.enablePerformanceMonitoring}
+          onChange={(e) => setSettings({ enablePerformanceMonitoring: e.target.checked })}
+        />
       </Stack>
 
       {/* others */}

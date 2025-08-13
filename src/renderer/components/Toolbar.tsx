@@ -4,6 +4,7 @@ import Button from '@mui/material/Button'
 import SearchIcon from '@mui/icons-material/Search'
 import HistoryIcon from '@mui/icons-material/History'
 import Save from '@mui/icons-material/Save'
+import PsychologyIcon from '@mui/icons-material/Psychology'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import * as atoms from '../stores/atoms'
 import { useTranslation } from 'react-i18next'
@@ -20,6 +21,9 @@ import { ConfirmDeleteMenuItem } from './ConfirmDeleteButton'
 import NiceModal from '@ebay/nice-modal-react'
 import { removeSession } from '@/stores/sessionStorageMutations'
 import UpdateAvailableButton from './UpdateAvailableButton'
+import MemoryCollector from './MemoryCollector'
+import { useAllSessions } from '../hooks/useAllSessions'
+import { useMyCopilots } from '../hooks/useCopilots'
 import platform from '@/platform'
 
 /**
@@ -33,6 +37,10 @@ export default function Toolbar() {
 
   const currentSession = useAtomValue(atoms.currentSessionAtom)
   const [showUpdateNotification, setShowUpdateNotification] = useState(false)
+  
+  // 获取所有会话和copilot数据，用于记忆收集器
+  const allSessions = useAllSessions()
+  const { copilots } = useMyCopilots()
 
   const setOpenSearchDialog = useSetAtom(atoms.openSearchDialogAtom)
   const setThreadHistoryDrawerOpen = useSetAtom(atoms.showThreadHistoryDrawerAtom)
@@ -74,6 +82,13 @@ export default function Toolbar() {
       return
     }
     removeSession(currentSession.id)
+    handleMoreMenuClose()
+  }
+  
+  const [memoryCollectorOpen, setMemoryCollectorOpen] = useState(false)
+  
+  const handleMemoryCollector = () => {
+    setMemoryCollectorOpen(true)
     handleMoreMenuClose()
   }
 
@@ -136,9 +151,13 @@ export default function Toolbar() {
         <MoreHorizIcon />
       </IconButton>
       <StyledMenu anchorEl={anchorEl} open={open} onClose={handleMoreMenuClose}>
-        <MenuItem onClick={handleExportAndSave} disableRipple divider>
+        <MenuItem onClick={handleExportAndSave} disableRipple>
           <Save fontSize="small" />
           {t('Export Chat')}
+        </MenuItem>
+        <MenuItem onClick={handleMemoryCollector} disableRipple divider>
+          <PsychologyIcon fontSize="small" />
+          {t('Memory Collector')}
         </MenuItem>
         <ConfirmDeleteMenuItem
           onDelete={handleSessionClean}
@@ -148,6 +167,17 @@ export default function Toolbar() {
         />
         <ConfirmDeleteMenuItem onDelete={handleSessionDelete} label={t('Delete Current Session')} />
       </StyledMenu>
+      
+      {/* 记忆收集器弹窗 */}
+      {memoryCollectorOpen && (
+        <MemoryCollector 
+          sessions={allSessions}
+          copilots={copilots}
+          currentSession={currentSession || undefined}
+          open={memoryCollectorOpen}
+          onClose={() => setMemoryCollectorOpen(false)}
+        />
+      )}
     </Box>
   )
 }

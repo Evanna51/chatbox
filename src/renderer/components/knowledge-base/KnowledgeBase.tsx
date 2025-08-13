@@ -20,6 +20,7 @@ import {
   KnowledgeBaseNameInput,
   KnowledgeBaseProviderModeSelect,
 } from './KnowledgeBaseForm'
+import MobileKnowledgeBase from './MobileKnowledgeBase'
 
 interface ModelPillProps {
   modelValue: string | null | undefined
@@ -315,6 +316,11 @@ const KnowledgeBasePage: React.FC = () => {
     } catch (error) {
       console.error('Failed to delete knowledge base:', error)
     }
+  }
+
+  // 移动端使用简化版本
+  if (platform.type === 'mobile') {
+    return <MobileKnowledgeBase />
   }
 
   return (

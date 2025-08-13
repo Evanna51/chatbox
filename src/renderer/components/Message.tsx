@@ -35,6 +35,8 @@ import type { Message, SessionType } from '../../shared/types'
 import '../static/Block.css'
 
 import { IconInfoCircle } from '@tabler/icons-react'
+import LazyMessageContent from './LazyMessageContent'
+import OptimizedMarkdown from './OptimizedMarkdown'
 import {
   autoCollapseCodeBlockAtom,
   autoPreviewArtifactsAtom,
@@ -367,8 +369,8 @@ const _Message: FC<Props> = (props) => {
         },
       }}
     >
-      <Grid container wrap="nowrap" spacing={1.5}>
-        <Grid item>
+      {/* <Grid container wrap="nowrap" spacing={1.5} direction={msg.role === 'user' ? 'row-reverse' : 'row'}> */}
+        {/* <Grid item>
           <Box className={cn(msg.role !== 'assistant' ? 'mt-1' : 'mt-2')}>
             {
               {
@@ -484,16 +486,17 @@ const _Message: FC<Props> = (props) => {
               }[msg.role]
             }
           </Box>
-        </Grid>
-        <Grid item xs sm container sx={{ width: '0px', paddingRight: '15px' }}>
-          <Grid item xs>
-            <MessageStatuses statuses={msg.status} />
-            <div
-              className={cn(
-                'max-w-full inline-block',
-                msg.role !== 'assistant' ? 'bg-stone-400/10 dark:bg-blue-400/10 px-4 rounded-lg' : 'w-full'
-              )}
-            >
+        </Grid> */}
+        <Grid item xs sm container sx={{ width: '100%', padding: msg.role === 'user' ? '0px 10px 0px 15px' : '0px 15px 0px 10px' }}>
+          <Grid item xs style={{ textAlign: msg.role === 'user' ? 'right' : 'left' }}>
+              <MessageStatuses statuses={msg.status} />
+              <div
+                className={cn(
+                  'max-w-full inline-block',
+                  msg.role !== 'assistant' ? 'bg-wechat-green/30 px-4 rounded-lg' : 'w-full'
+                )}
+                style={{ textAlign: 'left', borderTopRightRadius: msg.role === 'user' ? '0px' : '10px' }}
+              >
               <Box
                 className={cn('msg-content', { 'msg-content-small': small })}
                 sx={small ? { fontSize: theme.typography.body2.fontSize } : {}}
@@ -508,7 +511,7 @@ const _Message: FC<Props> = (props) => {
                 }
                 {contentParts && contentParts.length > 0 && (
                   <div>
-                    {contentParts.map((item, index) =>
+                    {contentParts.slice(0, 100).map((item, index) => // 限制最多处理100个片段，防止性能问题
                       item.type === 'reasoning' ? (
                         <div key={`reasoning-${msg.id}-${index}`}>
                           <ReasoningContentUI
@@ -520,22 +523,51 @@ const _Message: FC<Props> = (props) => {
                       ) : item.type === 'text' ? (
                         <div key={`text-${msg.id}-${index}`}>
                           {enableMarkdownRendering && !isCollapsed ? (
-                            <Markdown
-                              enableLaTeXRendering={enableLaTeXRendering}
-                              enableMermaidRendering={enableMermaidRendering}
-                              generating={msg.generating}
-                              preferCollapsedCodeBlock={
-                                autoCollapseCodeBlock &&
-                                (preferCollapsedCodeBlock || msg.role !== 'assistant' || previewArtifact)
-                              }
+                            <LazyMessageContent
+                              content={item.text || ''}
+                              isMarkdownEnabled={enableMarkdownRendering}
+                              maxInitialLength={platform.type === 'mobile' ? 5000 : 10000}
+                              chunkSize={platform.type === 'mobile' ? 3000 : 5000}
                             >
-                              {item.text || ''}
-                            </Markdown>
+                              {platform.type === 'mobile' ? (
+                                <OptimizedMarkdown
+                                  enableLaTeXRendering={false} // 暂时禁用LaTeX
+                                  enableMermaidRendering={false} // 暂时禁用Mermaid
+                                  generating={msg.generating}
+                                  preferCollapsedCodeBlock={
+                                    autoCollapseCodeBlock &&
+                                    (preferCollapsedCodeBlock || msg.role !== 'assistant' || previewArtifact)
+                                  }
+                                  maxRenderLength={contentLength > 100000 ? 30000 : 50000}
+                                >
+                                  {item.text || ''}
+                                </OptimizedMarkdown>
+                              ) : (
+                                <Markdown
+                                  enableLaTeXRendering={false} // 暂时禁用LaTeX
+                                  enableMermaidRendering={false} // 暂时禁用Mermaid
+                                  generating={msg.generating}
+                                  preferCollapsedCodeBlock={
+                                    autoCollapseCodeBlock &&
+                                    (preferCollapsedCodeBlock || msg.role !== 'assistant' || previewArtifact)
+                                  }
+                                >
+                                  {item.text || ''}
+                                </Markdown>
+                              )}
+                            </LazyMessageContent>
                           ) : (
-                            <div style={{ whiteSpace: 'pre-line' }}>
-                              {needCollapse && isCollapsed ? `${item.text.slice(0, collapseThreshold)}...` : item.text}
-                              {needCollapse && isCollapsed && CollapseButton}
-                            </div>
+                            <LazyMessageContent
+                              content={item.text || ''}
+                              isMarkdownEnabled={false}
+                              maxInitialLength={platform.type === 'mobile' ? 5000 : 10000}
+                              chunkSize={platform.type === 'mobile' ? 3000 : 5000}
+                            >
+                              <div style={{ whiteSpace: 'pre-line' }}>
+                                {needCollapse && isCollapsed ? `${item.text.slice(0, collapseThreshold)}...` : item.text}
+                                {needCollapse && isCollapsed && CollapseButton}
+                              </div>
+                            </LazyMessageContent>
                           )}
                         </div>
                       ) : item.type === 'info' ? (
@@ -630,7 +662,7 @@ const _Message: FC<Props> = (props) => {
               )}
             </div>
             {!hiddenButtonGroup && (
-              <Box sx={{ height: '35px' }}>
+              <Box sx={{ height: '35px', direction: 'ltr' }}>
                 {/* <Box sx={{ height: '35px' }} className='opacity-0 group-hover/message:opacity-100 delay-100 transition-all duration-100'> */}
                 <span
                   className={cn(
@@ -761,7 +793,7 @@ const _Message: FC<Props> = (props) => {
             )}
           </Grid>
         </Grid>
-      </Grid>
+      {/* </Grid> */}
     </Box>
   )
 }

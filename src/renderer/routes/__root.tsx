@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { type RemoteConfig, type Settings, Theme } from '@/../shared/types'
 import ExitFullscreenButton from '@/components/ExitFullscreenButton'
 import Toasts from '@/components/Toasts'
+import PerformanceMonitor from '@/components/PerformanceMonitor'
 import useAppTheme from '@/hooks/useAppTheme'
 import { useSystemLanguageWhenInit } from '@/hooks/useDefaultSystemLanguage'
 import { useI18nEffect } from '@/hooks/useI18nEffect'
@@ -67,49 +68,49 @@ function Root() {
     // 通过定时器延迟启动，防止处理状态底层存储的异步加载前错误的初始数据
     const tid = setTimeout(() => {
       ;(async () => {
-        const remoteConfig = await remote
-          .getRemoteConfig('setting_chatboxai_first')
-          .catch(() => ({ setting_chatboxai_first: false }) as RemoteConfig)
-        setRemoteConfig((conf) => ({ ...conf, ...remoteConfig }))
+        // const remoteConfig = await remote
+        //   .getRemoteConfig('setting_chatboxai_first')
+        //   .catch(() => ({ setting_chatboxai_first: false }) as RemoteConfig)
+        // setRemoteConfig((conf) => ({ ...conf, ...remoteConfig }))
         // 是否需要弹出设置窗口
-        initialized.current = true
-        if (settingActions.needEditSetting() && location.pathname !== '/settings/mcp') {
-          const res = await NiceModal.show('welcome')
-          if (res) {
-            if (res === 'custom') {
-              const provider: string = await NiceModal.show('provider-selector')
-              // 用户选择Add Custom Provider的话，暂时无法直接拉起添加自定义供应商的弹窗，先跳去默认的供应商配置页
-              if (provider === 'custom') {
-                navigate({
-                  to: '/settings/provider/chatbox-ai',
-                  search: {
-                    custom: true,
-                  },
-                })
-              } else {
-                navigate({
-                  to: '/settings/provider/$providerId',
-                  params: {
-                    providerId: provider,
-                  },
-                })
-              }
-            } else {
-              navigate({
-                to: '/settings/provider/chatbox-ai',
-              })
-            }
-          }
+        // initialized.current = true
+        // if (settingActions.needEditSetting() && location.pathname !== '/settings/mcp') {
+        //   const res = await NiceModal.show('welcome')
+        //   if (res) {
+        //     if (res === 'custom') {
+        //       const provider: string = await NiceModal.show('provider-selector')
+        //       // 用户选择Add Custom Provider的话，暂时无法直接拉起添加自定义供应商的弹窗，先跳去默认的供应商配置页
+        //       if (provider === 'custom') {
+        //         navigate({
+        //           to: '/settings/provider/chatbox-ai',
+        //           search: {
+        //             custom: true,
+        //           },
+        //         })
+        //       } else {
+        //         navigate({
+        //           to: '/settings/provider/$providerId',
+        //           params: {
+        //             providerId: provider,
+        //           },
+        //         })
+        //       }
+        //     } else {
+        //       navigate({
+        //         to: '/settings/provider/chatbox-ai',
+        //       })
+        //     }
+        //   }
 
-          return
-        }
+        //   return
+        // }
         // 是否需要弹出关于窗口（更新后首次启动）
         // 目前仅在桌面版本更新后首次启动、且网络环境为"外网"的情况下才自动弹窗
-        const shouldShowAboutDialogWhenStartUp = await platform.shouldShowAboutDialogWhenStartUp()
-        if (shouldShowAboutDialogWhenStartUp && remoteConfig.setting_chatboxai_first) {
-          setOpenAboutDialog(true)
-          return
-        }
+        // const shouldShowAboutDialogWhenStartUp = await platform.shouldShowAboutDialogWhenStartUp()
+        // if (shouldShowAboutDialogWhenStartUp && remoteConfig.setting_chatboxai_first) {
+        //   setOpenAboutDialog(true)
+        //   return
+        // }
       })()
     }, 2000)
 
@@ -204,6 +205,7 @@ function Root() {
       {/* 没有配置模型时的欢迎弹窗 */}
       {/* <WelcomeDialog /> */}
       <Toasts /> {/* mui */}
+      <PerformanceMonitor show={true} />
     </Box>
   )
 }
@@ -573,7 +575,7 @@ const creteMantineTheme = (scale = 1) =>
 export const Route = createRootRoute({
   component: () => {
     useI18nEffect()
-    premiumActions.useAutoValidate() // 每次启动都执行 license 检查，防止用户在lemonsqueezy管理页面中取消了当前设备的激活
+    // premiumActions.useAutoValidate() // 每次启动都执行 license 检查，防止用户在lemonsqueezy管理页面中取消了当前设备的激活
     useSystemLanguageWhenInit()
     useShortcut()
     useScreenChange()

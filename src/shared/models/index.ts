@@ -183,7 +183,7 @@ export function getModel(setting: Settings, config: Config, dependencies: ModelD
     case ModelProviderEnum.DeepSeek:
       return new DeepSeek(
         {
-          apiKey: providerSetting.apiKey || '',
+          apiKey: providerSetting.apiKey || providerBaseInfo.defaultSettings?.apiKey || '',
           model,
           temperature: setting.temperature,
           topP: setting.topP,

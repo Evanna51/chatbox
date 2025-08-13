@@ -178,6 +178,15 @@ export default class DesktopPlatform implements Platform {
     return this.ipc.invoke('switch-theme', theme)
   }
 
+  public async sendProactiveNotification(title: string, body: string, sessionId?: string): Promise<void> {
+    try {
+      // 桌面端通过IPC调用主进程发送通知
+      return this.ipc.invoke('sendProactiveNotification', title, body, sessionId)
+    } catch (error) {
+      console.error('[ProactiveNotification] Error sending desktop notification:', error)
+    }
+  }
+
   public getKnowledgeBaseController() {
     if (!this._kbController) {
       this._kbController = new DesktopKnowledgeBaseController(this.ipc)

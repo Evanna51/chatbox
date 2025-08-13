@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { createModelDependencies } from '@/adapters'
 import * as dom from '@/hooks/dom'
 import { languageNameMap } from '@/i18n/locales'
-import { formatChatAsHtml, formatChatAsMarkdown, formatChatAsTxt } from '@/lib/format-chat'
+import { formatChatAsHtml, formatChatAsMarkdown, formatChatAsTxt, formatChatAsJson } from '@/lib/format-chat'
 import * as appleAppStore from '@/packages/apple_app_store'
 import * as localParser from '@/packages/local-parser'
 import { generateImage, generateText, streamText } from '@/packages/model-calls'
@@ -584,6 +584,11 @@ export async function submitNewUserMessage(params: {
   }
   // 先在聊天列表中插入发送的用户消息
   insertMessage(currentSessionId, newUserMsg)
+  
+  // 更新主动通知的活动时间
+  import('@/packages/proactive-notification').then(({ updateSessionActivity }) => {
+    updateSessionActivity(currentSessionId)
+  })
 
   const settings = getCurrentSessionMergedSettings()
   const isChatboxAI = settings.provider === ModelProviderEnum.ChatboxAI
@@ -1402,23 +1407,31 @@ export function getCurrentSessionMergedSettings() {
 }
 
 export async function exportChat(session: Session, scope: ExportChatScope, format: ExportChatFormat) {
-  const threads: SessionThread[] = scope === 'all_threads' ? session.threads || [] : []
-  threads.push({
-    id: session.id,
-    name: session.threadName || session.name,
-    messages: session.messages,
-    createdAt: Date.now(),
-  })
+  try {
+    const threads: SessionThread[] = scope === 'all_threads' ? session.threads || [] : []
+    threads.push({
+      id: session.id,
+      name: session.threadName || session.name,
+      messages: session.messages,
+      createdAt: Date.now(),
+    })
 
-  if (format === 'Markdown') {
-    const content = formatChatAsMarkdown(session.name, threads)
-    platform.exporter.exportTextFile(`${session.name}.md`, content)
-  } else if (format === 'TXT') {
-    const content = formatChatAsTxt(session.name, threads)
-    platform.exporter.exportTextFile(`${session.name}.txt`, content)
-  } else if (format === 'HTML') {
-    const content = await formatChatAsHtml(session.name, threads)
-    platform.exporter.exportTextFile(`${session.name}.html`, content)
+    if (format === 'Markdown') {
+      const content = formatChatAsMarkdown(session.name, threads)
+      await platform.exporter.exportTextFile(`${session.name}.md`, content)
+    } else if (format === 'TXT') {
+      const content = formatChatAsTxt(session.name, threads)
+      await platform.exporter.exportTextFile(`${session.name}.txt`, content)
+    } else if (format === 'JSON') {
+      const content = formatChatAsJson(session.name, threads);
+      await platform.exporter.exportTextFile(`${session.name}.json`, content)
+    } else if (format === 'HTML') {
+      const content = await formatChatAsHtml(session.name, threads)
+      await platform.exporter.exportTextFile(`${session.name}.html`, content)
+    }
+  } catch (error) {
+    console.error('导出聊天记录失败:', error)
+    throw error
   }
 }
 

@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next'
 import { type CopilotDetail, createMessage, type Session } from 'src/shared/types'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
+import { ImageInStorage } from '@/components/Image'
 import InputBox, { type InputBoxPayload } from '@/components/InputBox'
 import HomepageIcon from '@/components/icons/HomepageIcon'
 import Page from '@/components/Page'
@@ -329,6 +330,8 @@ const CopilotPicker = ({ selectedId, onSelect }: { selectedId?: string; onSelect
                 key={copilot.id}
                 name={copilot.name}
                 picUrl={copilot.picUrl}
+                avatarKey={copilot.avatarKey}
+                avatarEmoji={copilot.avatarEmoji}
                 selected={selectedId === copilot.id}
                 onClick={() => {
                   onSelect?.(copilot)
@@ -360,17 +363,32 @@ const CopilotPicker = ({ selectedId, onSelect }: { selectedId?: string; onSelect
 const CopilotItem = ({
   name,
   picUrl,
+  avatarKey,
+  avatarEmoji,
   selected,
   onClick,
   noAvatar = false,
 }: {
   name: string
   picUrl?: string
+  avatarKey?: string
+  avatarEmoji?: string
   selected?: boolean
   onClick?(): void
   noAvatar?: boolean
 }) => {
   const isSmallScreen = useIsSmallScreen()
+  
+  const renderAvatarContent = () => {
+    if (avatarKey) {
+      return <ImageInStorage storageKey={avatarKey} className="object-cover object-center w-full h-full" />
+    } else if (avatarEmoji) {
+      return <Text size={isSmallScreen ? 'xs' : 'sm'}>{avatarEmoji}</Text>
+    } else {
+      return name.slice(0, 1)
+    }
+  }
+  
   return (
     <Flex
       align="center"
@@ -387,7 +405,7 @@ const CopilotItem = ({
     >
       {!noAvatar && (
         <Avatar src={picUrl} color="chatbox-brand" size={isSmallScreen ? 20 : 24}>
-          {name.slice(0, 1)}
+          {renderAvatarContent()}
         </Avatar>
       )}
       <Text fw="600" c={selected ? 'chatbox-brand' : 'chatbox-primary'}>

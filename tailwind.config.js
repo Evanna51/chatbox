@@ -4,6 +4,9 @@ module.exports = {
   content: ['./src/renderer/**/*.{js,jsx,ts,tsx}'],
   theme: {
     extend: {
+      colors: {
+        'wechat-green': '#07c160',
+      },
       spacing: {
         none: 'var(--chatbox-spacing-none)',
         '3xs': 'var(--chatbox-spacing-3xs)',

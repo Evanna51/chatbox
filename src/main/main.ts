@@ -8,7 +8,7 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
-import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, session, shell, Tray } from 'electron'
+import { app, BrowserWindow, globalShortcut, ipcMain, Menu, nativeTheme, Notification, session, shell, Tray } from 'electron'
 import log from 'electron-log/main'
 import { autoUpdater } from 'electron-updater'
 import os from 'os'
@@ -604,4 +604,35 @@ ipcMain.handle('switch-theme', (event, theme: 'dark' | 'light') => {
     color: theme === 'dark' ? '#282828' : 'white',
     symbolColor: theme === 'dark' ? 'white' : 'black',
   })
+})
+
+ipcMain.handle('sendProactiveNotification', (event, title: string, body: string, sessionId?: string) => {
+  try {
+    // 使用Electron的Notification API发送桌面通知
+    const notification = new Notification({
+      title,
+      body,
+      icon: getAssetPath('icon.png')
+    })
+    
+    // 点击通知时显示窗口并导航到对应会话
+    notification.on('click', () => {
+      if (mainWindow) {
+        if (mainWindow.isMinimized()) {
+          mainWindow.restore()
+        }
+        mainWindow.focus()
+        
+        // 如果有sessionId，导航到对应会话
+        if (sessionId) {
+          mainWindow.webContents.send('navigate-to', `/session/${sessionId}`)
+        }
+      }
+    })
+    
+    notification.show()
+    log.info(`[ProactiveNotification] Desktop notification sent: ${title}`)
+  } catch (error) {
+    log.error('[ProactiveNotification] Error sending desktop notification:', error)
+  }
 })

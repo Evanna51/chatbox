@@ -1,6 +1,23 @@
-import { Button as MantineButton, Switch as MantineSwitch } from '@mantine/core'
+import { Switch as MantineSwitch } from '@mantine/core'
+import { ConfirmDeleteMenuItem } from '@/components/ConfirmDeleteButton'
+import EmojiPicker from '@/components/EmojiPicker'
+import { ImageInStorage, handleImageInputAndSave } from '@/components/Image'
+import Page from '@/components/Page'
+import StyledMenu from '@/components/StyledMenu'
+import { useMyCopilots, useRemoteCopilots } from '@/hooks/useCopilots'
+import { useIsSmallScreen } from '@/hooks/useScreenChange'
+import { trackingEvent } from '@/packages/event'
+import * as remote from '@/packages/remote'
+import platform from '@/platform'
+import storage from '@/storage'
+import { StorageKeyGenerator } from '@/storage/StoreStorage'
+import * as atoms from '@/stores/atoms'
+import * as sessionActions from '@/stores/sessionActions'
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import EditIcon from '@mui/icons-material/Edit'
+import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions'
 import MoreHorizOutlinedIcon from '@mui/icons-material/MoreHorizOutlined'
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera'
 import StarIcon from '@mui/icons-material/Star'
 import StarOutlineIcon from '@mui/icons-material/StarOutline'
 import {
@@ -8,6 +25,8 @@ import {
   Box,
   Button,
   ButtonGroup,
+  Card,
+  CardContent,
   Divider,
   FormControl,
   FormControlLabel,
@@ -16,6 +35,7 @@ import {
   InputLabel,
   MenuItem,
   Select,
+  Stack,
   Switch,
   TextField,
   Typography,
@@ -27,15 +47,6 @@ import { useAtom } from 'jotai'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { v4 as uuidv4 } from 'uuid'
-import { ConfirmDeleteMenuItem } from '@/components/ConfirmDeleteButton'
-import Page from '@/components/Page'
-import StyledMenu from '@/components/StyledMenu'
-import { useMyCopilots, useRemoteCopilots } from '@/hooks/useCopilots'
-import { useIsSmallScreen } from '@/hooks/useScreenChange'
-import { trackingEvent } from '@/packages/event'
-import * as remote from '@/packages/remote'
-import platform from '@/platform'
-import * as atoms from '@/stores/atoms'
 import type { CopilotDetail } from '../../shared/types'
 
 // 定义分类选项
@@ -131,91 +142,33 @@ function Copilots() {
                 />
               </Box>
             </Box>
-
-            {/* My Copilots Section */}
-            <Box sx={{ mb: 4 }}>
-              <Typography
-                variant="h6"
-                sx={{
-                  mb: 2,
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  color: (theme) => (theme.palette.mode === 'dark' ? '#fff' : '#212529'),
-                }}
-              >
-                {t('My Copilots')}
-              </Typography>
-
-              <MantineButton
-                variant="light"
-                color="blue"
-                leftSection={<IconPlus size={20} />}
-                mb={16}
-                onClick={() => {
-                  getEmptyCopilot().then(setCopilotEdit)
-                }}
-              >
-                {t('Create New Copilot')}
-              </MantineButton>
-
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                  gap: 1.5,
-                }}
-              >
-                {list.map((item, ix) => (
-                  <MiniItem
-                    key={`${item.id}_${ix}`}
-                    mode="local"
-                    detail={item}
-                    selectMe={() => selectCopilot(item)}
-                    switchStarred={() => {
-                      store.addOrUpdate({
-                        ...item,
-                        starred: !item.starred,
-                      })
-                    }}
-                    editMe={() => {
-                      setCopilotEdit(item)
-                    }}
-                    deleteMe={() => {
-                      store.remove(item.id)
-                    }}
-                  />
-                ))}
-              </Box>
-            </Box>
-
-            {/* Chatbox Featured Section */}
-            <Box>
-              <Typography
-                variant="h6"
-                sx={{
-                  mb: 2,
-                  fontSize: '16px',
-                  fontWeight: 700,
-                  color: (theme) => (theme.palette.mode === 'dark' ? '#fff' : '#212529'),
-                }}
-              >
-                {t('Chatbox Featured')}
-              </Typography>
-
-              <Box
-                sx={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-                  gap: 1.5,
-                }}
-              >
-                {remoteCopilots?.map((item, ix) => (
-                  <MiniItem key={`${item.id}_${ix}`} mode="remote" detail={item} selectMe={() => selectCopilot(item)} />
-                ))}
-              </Box>
-            </Box>
           </>
         )}
+
+        {/* <ScrollableTabsButtonAuto
+          values={[
+            {
+              value: 'chatbox-featured',
+              label: t('Chatbox Featured'),
+            },
+          ]}
+          currentValue="chatbox-featured"
+          onChange={() => {}}
+        /> */}
+        {/* <div
+          style={{
+            display: 'flex',
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            width: '100%',
+            overflowY: 'auto',
+            overflowX: 'hidden',
+          }}
+        >
+          {remoteCopilots?.map((item, ix) => (
+            <MiniItem key={`${item.id}_${ix}`} mode="remote" detail={item} useMe={() => useCopilot(item)} />
+          ))}
+        </div> */}
       </div>
     </Page>
   )
@@ -270,7 +223,7 @@ function MiniItem(props: MiniItemProps) {
         backgroundColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.03)' : '#fff'),
         transition: 'all 0.2s',
         '.edit-icon': {
-          opacity: 0,
+          opacity: 0.5,
         },
         '&:hover': {
           borderColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.2)' : '#adb5bd'),
@@ -282,17 +235,16 @@ function MiniItem(props: MiniItemProps) {
       }}
       onClick={selectCopilot}
     >
-      <Avatar
-        sx={{
-          width: '28px',
-          height: '28px',
-          backgroundColor: (theme) => (theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : '#e9ecef'),
-        }}
-        src={props.detail.picUrl}
-      />
-      <Box
-        sx={{
-          marginLeft: '12px',
+      <Avatar sizes="30px" sx={{ width: '30px', height: '30px' }} src={props.detail.picUrl}>
+        {props.detail.avatarKey ? (
+          <ImageInStorage storageKey={props.detail.avatarKey} className="object-cover object-center w-full h-full" />
+        ) : props.detail.avatarEmoji ? (
+          <Typography variant="body1">{props.detail.avatarEmoji}</Typography>
+        ) : null}
+      </Avatar>
+      <div
+        style={{
+          marginLeft: '5px',
           flex: 1,
           overflow: 'hidden',
         }}
@@ -308,7 +260,7 @@ function MiniItem(props: MiniItemProps) {
         >
           {props.detail.name}
         </Typography>
-      </Box>
+      </div>
 
       {props.mode === 'local' && (
         <>
@@ -403,13 +355,17 @@ function CopilotForm(props: CopilotFormProps) {
   const theme = useTheme()
   const isSmallScreen = useIsSmallScreen()
   const [copilotEdit, setCopilotEdit] = useState<CopilotDetail>(props.copilotDetail)
+  const avatarInputRef = React.useRef<HTMLInputElement>(null)
+  
   useEffect(() => {
     setCopilotEdit(props.copilotDetail)
   }, [props.copilotDetail])
+  
   const [helperTexts, setHelperTexts] = useState({
     name: <></>,
     prompt: <></>,
   })
+  
   const inputHandler = (field: keyof CopilotDetail) => {
     return (event: React.ChangeEvent<HTMLInputElement>) => {
       setHelperTexts({ name: <></>, prompt: <></> })
@@ -429,6 +385,52 @@ function CopilotForm(props: CopilotFormProps) {
     setCopilotEdit(updatedCopilot)
     setHelperTexts({ name: <></>, prompt: <></> })
   }
+
+  const handleEmojiSelect = (emoji: string) => {
+    setCopilotEdit({ 
+      ...copilotEdit, 
+      avatarEmoji: emoji, 
+      avatarKey: undefined, // 清除上传的图片
+      picUrl: '' // 清除URL
+    })
+  }
+
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      const key = StorageKeyGenerator.picture(`copilot-avatar:${copilotEdit.id}`)
+      handleImageInputAndSave(file, key, (savedKey) => {
+        setCopilotEdit({ 
+          ...copilotEdit, 
+          avatarKey: savedKey, 
+          avatarEmoji: undefined, // 清除emoji
+          picUrl: '' // 清除URL
+        })
+      })
+    }
+  }
+
+  const clearAvatar = () => {
+    setCopilotEdit({ 
+      ...copilotEdit, 
+      avatarKey: undefined, 
+      avatarEmoji: undefined, 
+      picUrl: '' 
+    })
+  }
+
+  const renderAvatar = () => {
+    if (copilotEdit.avatarKey) {
+      return <ImageInStorage storageKey={copilotEdit.avatarKey} className="object-cover object-center w-full h-full" />
+    } else if (copilotEdit.avatarEmoji) {
+      return <Typography variant="h3">{copilotEdit.avatarEmoji}</Typography>
+    } else if (copilotEdit.picUrl) {
+      return <img src={copilotEdit.picUrl} className="object-cover object-center w-full h-full" alt="Avatar" />
+    } else {
+      return <PhotoCameraIcon sx={{ fontSize: 40, color: 'action.disabled' }} />
+    }
+  }
+  
   const save = () => {
     copilotEdit.name = copilotEdit.name.trim()
     copilotEdit.prompt = copilotEdit.prompt.trim()
@@ -452,6 +454,7 @@ function CopilotForm(props: CopilotFormProps) {
     props.save(copilotEdit)
     trackingEvent('create_copilot', { event_category: 'user' })
   }
+  
   return (
     <Box
       sx={{
@@ -471,6 +474,7 @@ function CopilotForm(props: CopilotFormProps) {
         onChange={inputHandler('name')}
         helperText={helperTexts.name}
       />
+      
       <FormControl fullWidth margin="dense" variant="outlined">
         <InputLabel>{t('Copilot Category')}</InputLabel>
         <Select
@@ -486,6 +490,87 @@ function CopilotForm(props: CopilotFormProps) {
           </MenuItem>
         </Select>
       </FormControl>
+
+      {/* 头像配置区域 */}
+      <Card sx={{ margin: '16px 0', padding: '16px' }}>
+        <Typography variant="subtitle2" gutterBottom>
+          {t('Copilot Avatar')}
+        </Typography>
+        
+        <Stack direction="row" spacing={2} alignItems="center">
+          {/* 头像预览 */}
+          <Avatar 
+            sx={{ 
+              width: 80, 
+              height: 80,
+              backgroundColor: theme.palette.grey[200],
+              cursor: 'pointer'
+            }}
+            onClick={() => avatarInputRef.current?.click()}
+          >
+            {renderAvatar()}
+          </Avatar>
+          
+          {/* 操作按钮 */}
+          <Stack spacing={1}>
+            <EmojiPicker
+              onEmojiSelect={handleEmojiSelect}
+              trigger={
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<EmojiEmotionsIcon />}
+                >
+                  {t('Select Emoji')}
+                </Button>
+              }
+            />
+            
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<PhotoCameraIcon />}
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              {t('Upload Image')}
+            </Button>
+            
+            {(copilotEdit.avatarKey || copilotEdit.avatarEmoji || copilotEdit.picUrl) && (
+              <Button
+                variant="text"
+                size="small"
+                color="error"
+                onClick={clearAvatar}
+              >
+                {t('Clear Avatar')}
+              </Button>
+            )}
+          </Stack>
+        </Stack>
+        
+        <input
+          type="file"
+          ref={avatarInputRef}
+          style={{ display: 'none' }}
+          accept="image/*"
+          onChange={handleImageUpload}
+        />
+        
+        {/* 可选：保留URL输入 */}
+        <TextField
+          margin="dense"
+          label={t('Copilot Avatar URL')}
+          placeholder="http://xxxxx/xxx.png"
+          fullWidth
+          variant="outlined"
+          size="small"
+          value={copilotEdit.picUrl || ''}
+          onChange={inputHandler('picUrl')}
+          sx={{ marginTop: 2 }}
+          helperText={t('Optional: Use URL instead of emoji or upload')}
+        />
+      </Card>
+      
       <TextField
         margin="dense"
         label={t('Copilot Prompt')}
@@ -499,15 +584,7 @@ function CopilotForm(props: CopilotFormProps) {
         onChange={inputHandler('prompt')}
         helperText={helperTexts.prompt}
       />
-      <TextField
-        margin="dense"
-        label={t('Copilot Avatar URL')}
-        placeholder="http://xxxxx/xxx.png"
-        fullWidth
-        variant="outlined"
-        value={copilotEdit.picUrl}
-        onChange={inputHandler('picUrl')}
-      />
+      
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <FormGroup row>
           <FormControlLabel
@@ -536,6 +613,8 @@ export async function getEmptyCopilot(): Promise<CopilotDetail> {
     id: `${conf.uuid}:${uuidv4()}`,
     name: '',
     picUrl: '',
+    avatarKey: undefined,
+    avatarEmoji: undefined,
     prompt: CHARACTER_DEFAULT_PROMPT,
     starred: false,
     usedCount: 0,
