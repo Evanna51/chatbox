@@ -77,7 +77,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
     if (totalMessages > 0) {
       options.push({
         id: 'all_threads',
-        name: '当前会话所有话题',
+        name: '所有话题',
         messageCount: totalMessages
       })
     }
@@ -408,7 +408,15 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
         </Button>
       )}
 
-      <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
+      <Dialog 
+       open={open} onClose={handleClose} maxWidth="md" fullWidth
+       PaperProps={{
+        sx: {
+          margin: '12px',
+          maxWidth: '400px',
+          borderRadius: 2,
+        },
+      }}>
         <DialogTitle>
           {t('Memory Collector')}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
@@ -428,7 +436,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
             <div style={{padding: '10px 0'}}></div>
             {threadOptions.length > 0 && (
               <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                <FormControl size="small" sx={{ minWidth: 250 }}>
+                <FormControl size="small" sx={{ minWidth: 160 }}>
                   <InputLabel>选择分析范围</InputLabel>
                   <Select
                     value={selectedThreadId}

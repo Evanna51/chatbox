@@ -1,4 +1,4 @@
-import { CloseButton, Flex, Slider, TextInput } from '@mantine/core'
+import { CloseButton, Flex, Slider, Text, TextInput } from '@mantine/core'
 import clsx from 'clsx'
 import { type ChangeEvent, type KeyboardEvent, useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -10,10 +10,11 @@ export type Props = {
   max?: number
   step?: number
   className?: string
+  showInput?: boolean
 }
 
 // SliderChangeEnd触发 或者 input blur的时候才触发onChange
-export default function SliderWithInput({ value, onChange, min = 0, max = 1, step = 0.01, className }: Props) {
+export default function SliderWithInput({ value, onChange, min = 0, max = 1, step = 0.1, className, showInput = false }: Props) {
   const { t } = useTranslation()
   const [tempSliderValue, setTempSliderValue] = useState<number>()
   const sliderValue = useMemo(() => tempSliderValue ?? value ?? 0, [tempSliderValue, value])
@@ -67,6 +68,7 @@ export default function SliderWithInput({ value, onChange, min = 0, max = 1, ste
         onChange={handleSliderChange}
         onChangeEnd={handleSliderChangeEnd}
       />
+      {showInput ? (
       <TextInput
         w={64}
         size="sm"
@@ -86,9 +88,10 @@ export default function SliderWithInput({ value, onChange, min = 0, max = 1, ste
         rightSection={
           typeof inputRawValue === 'string' || inputRawValue === undefined ? null : (
             <CloseButton size="xs" onClick={() => onChange?.()} />
-          )
-        }
-      />
+            )
+          }
+        />
+      ) : <Text size="sm" fw="600">{inputValue}</Text>}
     </Flex>
   )
 }

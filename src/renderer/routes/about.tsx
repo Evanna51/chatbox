@@ -40,24 +40,18 @@ function RouteComponent() {
       <Container size="md" p={0}>
         <Stack gap="xxl" px={isSmallScreen ? 'sm' : 'md'} py={isSmallScreen ? 'xl' : 'md'}>
           <Flex gap="xxl" p="md" className="rounded-lg bg-[var(--mantine-color-chatbox-background-secondary-text)]">
-            <Image h={100} w={100} mah={'20vw'} maw={'20vw'} src={iconPNG} />
+            
             <Stack flex={1} gap="xxs">
               <Flex justify="space-between" align="center">
                 <Title order={5} lh={1.5}>
                   Chatbox {/\d/.test(version.version) ? `(v${version.version})` : ''}
                 </Title>
-
-                {!isSmallScreen && (
-                  <Button
-                    size="xs"
-                    onClick={() => platform.openLink(`https://chatboxai.app/redirect_app/check_update/${language}`)}
-                  >
-                    {t('Check Update')}
-                  </Button>
-                )}
               </Flex>
-              <Text>{t('about-slogan')}</Text>
-              <Text c="chatbox-tertiary">{t('about-introduction')}</Text>
+              <Text c="chatbox-tertiary">
+                温度（Temperature）（0-2）：控制模型生成文本的创造性和随机性。较高的温度值会使输出更随机、更具创造性，而较低的温度值则更稳定、更确定。
+Top P（Top P）（0-1）：控制模型生成文本的多样性。较高的Top P值会使输出更随机、更具多样性，而较低的Top P值则更稳定、更确定。
+话题频率（Frequency Penalty）（-2-2）：控制模型生成文本的重复性。较高的频率惩罚值会使模型避免重复生成相同的词汇，而较低的频率惩罚值则允许重复生成相同的词汇。
+              </Text>
 
               <Flex gap="sm">
                 <Anchor

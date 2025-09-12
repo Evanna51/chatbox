@@ -22,7 +22,7 @@ export interface Props {
   labelProps?: TextProps
 }
 
-const MESSAGE_COUNT_OPTIONS = [0, 2, 4, 6, 8, 10, 20, 50, 100, 200, 500, Number.MAX_SAFE_INTEGER]
+const MESSAGE_COUNT_OPTIONS = [0, 2, 4, 6, 10, 20, 50, 100,120, 150,180, 200,250, 500, Number.MAX_SAFE_INTEGER]
 export default function MaxContextMessageCountSlider({ value, onChange, className, wrapperProps, labelProps }: Props) {
   const { t } = useTranslation()
 
@@ -84,24 +84,11 @@ export default function MaxContextMessageCountSlider({ value, onChange, classNam
 
   return (
     <Stack gap="xs" {...wrapperProps}>
-      <Flex align="center" gap="xs">
-        <Text size="sm" fw={'600'} {...labelProps}>
+      
+      <Flex gap="sm" align="center" className={className}>
+      <Text size="sm" fw={'600'} {...labelProps}>
           {t('Max Message Count in Context')}
         </Text>
-        <Tooltip
-          label={t(
-            'Regulate the volume of historical messages sent to the AI, striking a harmonious balance between depth of comprehension and the efficiency of responses.'
-          )}
-          withArrow={true}
-          maw={320}
-          className="!whitespace-normal"
-          zIndex={3000}
-          events={{ hover: true, focus: true, touch: true }}
-        >
-          <IconInfoCircle size={20} className="text-[var(--mantine-color-chatbox-tertiary-text)]" />
-        </Tooltip>
-      </Flex>
-      <Flex gap="sm" align="center" className={className}>
         <Slider
           flex={1}
           step={1}
@@ -118,7 +105,8 @@ export default function MaxContextMessageCountSlider({ value, onChange, classNam
           onChange={handleSliderChange}
           onChangeEnd={handleSliderChangeEnd}
         />
-        <TextInput
+        <Text size="sm" fw={'600'} {...labelProps}>{MESSAGE_COUNT_OPTIONS[sliderValue]}</Text>
+        {/* <TextInput
           w={64}
           size="sm"
           value={inputValue}
@@ -129,7 +117,7 @@ export default function MaxContextMessageCountSlider({ value, onChange, classNam
           classNames={{
             input: '!text-center !px-0',
           }}
-        />
+        /> */}
       </Flex>
     </Stack>
   )

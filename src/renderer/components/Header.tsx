@@ -189,21 +189,70 @@ export default function Header(props: HeaderProps = {}) {
             </IconButton>
           </Box>
         )}
-        <div className={cn('w-full flex flex-row flex-grow pt-2 pb-2')}>
+        {/* showSidebar ? 'ml-3' : 'ml-1' */}
+        <div className={cn('w-full flex flex-row flex-grow pt-2 pb-2 ml-1')}>
           <div className="flex flex-row items-center w-0 flex-1 mr-1">
-            <Typography
-              variant="h6"
-              noWrap
-              className={cn(
-                'flex-shrink flex-grow-0 overflow-hidden text-ellipsis whitespace-nowrap',
-                showSidebar ? 'ml-3' : 'ml-1'
-              )}
-              sx={{
-                fontSize: '14px',
-              }}
+            <div className="">
+              <Typography
+                variant="h6"
+                noWrap
+                className={cn(
+                  'flex-shrink flex-grow-0 overflow-hidden text-ellipsis whitespace-nowrap',
+                  
+                )}
+                sx={{
+                  fontSize: '14px',
+                }}
+              >
+                {currentSession?.name}
+              </Typography>
+            {/* Model selector row */}
+            {currentSession && onSelectModel && (
+            <div className={cn('flex flex-row items-center relative z-10 controls')}>
+          
+              <div  className={cn('flex items-center controls', )}>
+            <Tooltip
+              label={t('Please select a model')}
+              color="red"
+              opened={showSelectModelErrorTip}
+              withArrow
             >
-              {currentSession?.name}
-            </Typography>
+              {currentSession.type === 'picture' ? (
+                <ImageModelSelect onSelect={onSelectModel}>
+                  <span 
+                    className="flex items-center text-xs opacity-70 cursor-pointer bg-transparent hover:bg-slate-400/25 h-6 px-2 py-1 rounded controls"
+                  >
+                    {providers.find((p) => p.id === model?.provider)?.name || model?.provider || t('Select Model')}
+                    <IconSelector size={12} className="opacity-50 ml-1" />
+                  </span>
+                </ImageModelSelect>
+              ) : (
+                <ModelSelector onSelect={onSelectModel}>
+                  <Flex
+                    gap="xxs"
+                    
+                    
+                    align="center"
+                    justify="flex-start"
+                    className="cursor-pointer hover:bg-slate-400/25 rounded-lg min-h-[24px] controls"
+                  >
+                    {/* {!!model && <ProviderImageIcon size={12} provider={model.provider} />} */}
+                    <Text size="xs" className="line-clamp-1">
+                      {model?.provider?.slice(0,2).toUpperCase() +'/'}
+                      {isSmallScreen ? shortModelDisplayText : modelSelectorDisplayText}
+                    </Text>
+                    <IconSelector
+                      size={16}
+                      className="flex-[0_0_auto] text-[var(--mantine-color-chatbox-tertiary-text)]"
+                    />
+                  </Flex>
+                </ModelSelector>
+              )}
+            </Tooltip>
+          </div>
+        </div>
+      )}
+            </div>
             {isSmallScreen ? (
               <MiniButton
                 className="ml-1 sm:ml-2 controls cursor-pointer"
@@ -218,7 +267,7 @@ export default function Header(props: HeaderProps = {}) {
                 }
                 tooltipPlacement="top"
               >
-                <Settings2 size="16" strokeWidth={1} />
+                <Settings2 size="14" strokeWidth={1} />
               </MiniButton>
             ) : (
               <a
@@ -236,60 +285,6 @@ export default function Header(props: HeaderProps = {}) {
           </div>
         </div>
       </div>
-
-      {/* Model selector row */}
-      {currentSession && onSelectModel && (
-        <div
-          className={cn(
-            'flex flex-row items-center py-1 pb-2 relative z-10 controls',
-            isSmallScreen ? 'px-3' : showSidebar ? 'sm:pl-6 sm:pr-5' : 'pl-3 pr-5',
-            (!showSidebar || isSmallScreen) && needRoomForMacWindowControls ? 'pl-20' : ''
-          )}
-        >
-          {/* 与标题对齐的容器 */}
-          <div 
-            className={cn('flex items-center controls', showSidebar && !isSmallScreen ? 'ml-3' : 'ml-1')}
-          >
-            <Tooltip
-              label={t('Please select a model')}
-              color="red"
-              opened={showSelectModelErrorTip}
-              withArrow
-            >
-              {currentSession.type === 'picture' ? (
-                <ImageModelSelect onSelect={onSelectModel}>
-                  <span 
-                    className="flex items-center text-sm opacity-70 cursor-pointer bg-transparent hover:bg-slate-400/25 h-6 px-2 py-1 rounded controls"
-                  >
-                    {providers.find((p) => p.id === model?.provider)?.name || model?.provider || t('Select Model')}
-                    <IconSelector size={16} className="opacity-50 ml-1" />
-                  </span>
-                </ImageModelSelect>
-              ) : (
-                <ModelSelector onSelect={onSelectModel}>
-                  <Flex
-                    gap="xs"
-                    px="xs"
-                    py="xs"
-                    align="center"
-                    justify="flex-start"
-                    className="cursor-pointer hover:bg-slate-400/25 rounded-lg min-h-[32px] controls"
-                  >
-                    {!!model && <ProviderImageIcon size={16} provider={model.provider} />}
-                    <Text size="sm" className="line-clamp-1">
-                      {isSmallScreen ? shortModelDisplayText : modelSelectorDisplayText}
-                    </Text>
-                    <IconSelector
-                      size={16}
-                      className="flex-[0_0_auto] text-[var(--mantine-color-chatbox-tertiary-text)]"
-                    />
-                  </Flex>
-                </ModelSelector>
-              )}
-            </Tooltip>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

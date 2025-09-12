@@ -96,17 +96,7 @@ export default function Toolbar() {
     <Box className="controls">
       {showUpdateNotification && <UpdateAvailableButton sx={{ mr: 2 }} />}
       {isSmallScreen ? (
-        <IconButton
-          color="inherit"
-          aria-label="menu"
-          onClick={() => setOpenSearchDialog(true)}
-          sx={{
-            mr: 0.5
-          }}
-        >
-          <SearchIcon />
-        </IconButton>
-      ) : (
+        null) : (
         <Button
           component="label"
           variant="outlined"
@@ -137,20 +127,19 @@ export default function Toolbar() {
           {widthFull ? <WidthWideIcon /> : <WidthNormalIcon />}
         </IconButton>
       )}
-      <IconButton
-        color="inherit"
-        aria-label="thread-history-drawer-button"
-        sx={{
-          mr: 0.5
-        }}
-        onClick={() => setThreadHistoryDrawerOpen(true)}
-      >
-        <HistoryIcon />
-      </IconButton>
+      
       <IconButton color="inherit" aria-label="more-menu-button" onClick={handleMoreMenuOpen}>
         <MoreHorizIcon />
       </IconButton>
       <StyledMenu anchorEl={anchorEl} open={open} onClose={handleMoreMenuClose}>
+      <MenuItem onClick={() => {setOpenSearchDialog(true); handleMoreMenuClose()}} disableRipple>
+          <SearchIcon fontSize="small" />
+          {t('Search')}
+        </MenuItem>
+        <MenuItem onClick={() => {setThreadHistoryDrawerOpen(true); handleMoreMenuClose()}} disableRipple divider>
+          <HistoryIcon fontSize="small" />
+          {t('Thread History')}
+        </MenuItem>
         <MenuItem onClick={handleExportAndSave} disableRipple>
           <Save fontSize="small" />
           {t('Export Chat')}

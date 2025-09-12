@@ -184,6 +184,8 @@ export type SessionSettings = Partial<{
   maxContextMessageCount: number
   temperature: number
   topP: number
+  frequency_penalty: number
+  presence_penalty: number
   maxTokens?: number
   stream: boolean
   dalleStyle: 'vivid' | 'natural'

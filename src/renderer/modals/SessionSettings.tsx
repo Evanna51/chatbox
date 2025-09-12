@@ -155,8 +155,25 @@ const SessionSettingsModal = NiceModal.create(
           modal.hide()
         }}
         fullWidth
+        PaperProps={{
+          sx: {
+            maxWidth: '400px',
+            borderRadius: 2,
+          },
+        }}
+        sx={{
+          '& .MuiDialogTitle-root': {
+            padding: '8px 12px',
+          },
+          '& .MuiDialogContent-root': {
+            padding: '8px 12px',
+          },
+          '& .MuiDialogActions-root': {
+            padding: '8px 12px',
+          },
+        }}
       >
-        <DialogTitle>{t('Conversation Settings')}</DialogTitle>
+        <DialogTitle>{t('Conversation Settings')}shiwoma</DialogTitle>
         <DialogContent>
           <DialogContentText></DialogContentText>
 
@@ -227,7 +244,7 @@ const SessionSettingsModal = NiceModal.create(
               variant="outlined"
               multiline
               minRows={2}
-              maxRows={8}
+              maxRows={20}
               value={systemPrompt}
               onChange={(event) => setSystemPrompt(event.target.value)}
             />
@@ -574,24 +591,12 @@ export function ChatConfig({
 
       <Stack gap="xs">
         <Flex align="center" gap="xs">
-          <Text size="sm" fw="600">
-            {t('Temperature')}
-          </Text>
-          <Tooltip
-            label={t(
-              'Modify the creativity of AI responses; the higher the value, the more random and intriguing the answers become, while a lower value ensures greater stability and reliability.'
-            )}
-            withArrow={true}
-            maw={320}
-            className="!whitespace-normal"
-            zIndex={3000}
-            events={{ hover: true, focus: true, touch: true }}
-          >
-            <IconInfoCircle size={20} className="text-[var(--mantine-color-chatbox-tertiary-text)]" />
-          </Tooltip>
-        </Flex>
+          <Text size="sm" fw="600">{t('Temperature')}</Text>
+          <SliderWithInput
+          className='flex-1'
 
-        <SliderWithInput value={settings?.temperature} onChange={(v) => onSettingsChange({ temperature: v })} max={2} />
+        value={settings?.temperature} onChange={(v) => onSettingsChange({ temperature: v })} max={2} />
+        </Flex>
       </Stack>
 
       <Stack gap="xs">
@@ -599,21 +604,8 @@ export function ChatConfig({
           <Text size="sm" fw="600">
             Top P
           </Text>
-          <Tooltip
-            label={t(
-              'The topP parameter controls the diversity of AI responses: lower values make the output more focused and predictable, while higher values allow for more varied and creative replies.'
-            )}
-            withArrow={true}
-            maw={320}
-            className="!whitespace-normal"
-            zIndex={3000}
-            events={{ hover: true, focus: true, touch: true }}
-          >
-            <IconInfoCircle size={20} className="text-[var(--mantine-color-chatbox-tertiary-text)]" />
-          </Tooltip>
+          <SliderWithInput className='flex-1' value={settings?.topP} onChange={(v) => onSettingsChange({ topP: v })} max={1} />
         </Flex>
-
-        <SliderWithInput value={settings?.topP} onChange={(v) => onSettingsChange({ topP: v })} max={1} />
       </Stack>
 
       <Flex justify="space-between" align="center">
@@ -646,7 +638,19 @@ export function ChatConfig({
         />
       </Flex>
 
-      {settings?.provider !== ModelProviderEnum.ChatboxAI && (
+      <Stack gap="xs">
+        <Flex align="center" gap="xs">
+          <Text size="sm" fw="600">
+            话题频率
+          </Text>
+          <SliderWithInput className='flex-1' 
+            value={settings?.frequency_penalty} 
+            max={2}
+            min={-2}
+            onChange={(v) => onSettingsChange({ frequency_penalty: v })}  />
+        </Flex>
+      </Stack>
+      {/* presence_penalty */}
         <Stack gap="xs" py="xs">
           <Flex align="center" justify="space-between" gap="xs">
             <Text size="sm" fw="600">
@@ -658,7 +662,6 @@ export function ChatConfig({
             />
           </Flex>
         </Stack>
-      )}
 
       {/* Auto-Summarize Settings */}
       <Stack gap="xs" py="xs">
