@@ -63,14 +63,30 @@ export function listFilesTool(knowledgeBaseId: number) {
     }),
     execute: async ({ page, pageSize }) => {
       const knowledgeBaseController = platform.getKnowledgeBaseController()
-      const files = await knowledgeBaseController.listFilesPaginated(knowledgeBaseId, page, pageSize)
-      return files
-        .filter((file) => file.status === 'done')
-        .map((file) => ({
+      
+      // 修复参数映射：page * pageSize = offset
+      const offset = page * pageSize
+      
+      try {
+        const files = await knowledgeBaseController.listFilesPaginated(knowledgeBaseId, offset, pageSize)
+        
+        if (!files || files.length === 0) {
+          return []
+        }
+        
+        const filteredFiles = files.filter((file) => {
+          return file.status === 'done' || file.status === 'completed'  // 支持多种完成状态
+        })
+        
+        return filteredFiles.map((file) => ({
           id: file.id,
           filename: file.filename,
           chunkCount: file.chunk_count || 0,
         }))
+      } catch (error) {
+        console.error(`[listFilesTool] Error executing:`, error)
+        throw error
+      }
     },
   })
 }

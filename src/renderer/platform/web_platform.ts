@@ -7,7 +7,8 @@ import { sliceTextByTokenLimit } from '@/packages/token'
 import { getBrowser, getOS } from '../packages/navigator'
 import type { Platform, PlatformType } from './interfaces'
 import type { KnowledgeBaseController } from './knowledge-base/interface'
-import SimpleMobileKnowledgeBaseController from './knowledge-base/simple-mobile-controller'
+// import SimpleMobileKnowledgeBaseController from './knowledge-base/simple-mobile-controller'
+import MobileKnowledgeBaseController from './knowledge-base/mobile-controller'
 import WebExporter from './web_exporter'
 import MobileExporter from './mobile_exporter'
 import { parseTextFileLocally } from './web_platform_utils'
@@ -19,7 +20,7 @@ export default class WebPlatform implements Platform {
   public type: PlatformType = CHATBOX_BUILD_TARGET === 'mobile_app' ? 'mobile' : 'web'
 
   public exporter = CHATBOX_BUILD_TARGET === 'mobile_app' ? new MobileExporter() : new WebExporter()
-  private _kbController?: SimpleMobileKnowledgeBaseController
+  private _kbController?: KnowledgeBaseController
 
   constructor() {}
 
@@ -251,11 +252,14 @@ export default class WebPlatform implements Platform {
   public getKnowledgeBaseController(): KnowledgeBaseController {
     if (CHATBOX_BUILD_TARGET === 'mobile_app') {
       if (!this._kbController) {
-        this._kbController = new SimpleMobileKnowledgeBaseController()
+        // 使用优化后的 MobileKnowledgeBaseController，已解决循环依赖问题
+        this._kbController = new MobileKnowledgeBaseController();
+        console.log('[Platform] 📦 Initialized with MobileKnowledgeBaseController (SQLite + AI enhanced)')
       }
       return this._kbController
     } else {
       throw new Error('Knowledge base not supported on web platform')
     }
   }
+
 }

@@ -114,9 +114,9 @@ export function injectModelSystemPrompt(
   additionalInfo: string,
   role: 'system' | 'user' = 'system'
 ) {
-  const metadataPrompt = `Current model: ${model}\nCurrent date: ${dayjs().format(
-    'YYYY-MM-DD'
-  )}\n Additional info for this conversation: ${additionalInfo}\n\n`
+  const metadataPrompt = `Current time: ${dayjs().format(
+    'YYYY-MM-DD HH:mm:ss'
+  )}(Conversation Real time)\n Additional info for this conversation: ${additionalInfo}\n\n`
   let hasInjected = false
   return messages.map((m) => {
     if (m.role === role && !hasInjected) {

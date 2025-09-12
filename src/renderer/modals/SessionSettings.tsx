@@ -695,10 +695,10 @@ export function ChatConfig({
                 value={settings?.autoSummarizeMessageThreshold}
                 onChange={(v) => onSettingsChange({ autoSummarizeMessageThreshold: typeof v === 'number' ? v : undefined })}
                 min={2}
-                max={20}
+                max={100}
                 step={1}
                 allowDecimal={false}
-                placeholder={(globalSettings?.autoSummarizeMessageThreshold ?? 4).toString()}
+                placeholder={(globalSettings?.autoSummarizeMessageThreshold ?? 16).toString()}
               />
             </Flex>
             
@@ -711,10 +711,10 @@ export function ChatConfig({
                 value={settings?.autoSummarizeTokenThreshold}
                 onChange={(v) => onSettingsChange({ autoSummarizeTokenThreshold: typeof v === 'number' ? v : undefined })}
                 min={500}
-                max={10000}
+                max={64*1024}
                 step={100}
                 allowDecimal={false}
-                placeholder={(globalSettings?.autoSummarizeTokenThreshold ?? 1000).toString()}
+                placeholder={(globalSettings?.autoSummarizeTokenThreshold ?? 6*1024).toString()}
               />
             </Flex>
           </Stack>

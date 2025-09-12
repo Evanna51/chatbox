@@ -1,30 +1,94 @@
 import NiceModal from '@ebay/nice-modal-react'
 import EditIcon from '@mui/icons-material/Edit'
 import ImageIcon from '@mui/icons-material/Image'
-import { Box, Chip, IconButton, Tooltip, Typography, useTheme } from '@mui/material'
+import { Box, Chip, IconButton, Tooltip as MuiTooltip, Typography, useTheme } from '@mui/material'
+import { Flex, Text, Tooltip } from '@mantine/core'
+import { IconSelector } from '@tabler/icons-react'
 import { useAtom, useAtomValue } from 'jotai'
 import { PanelRightClose, Settings2 } from 'lucide-react'
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { isChatSession, isPictureSession } from '../../shared/types'
+import { isChatSession, isPictureSession, type ModelProvider } from '../../shared/types'
 import useNeedRoomForWinControls from '../hooks/useNeedRoomForWinControls'
 import { useIsSmallScreen } from '../hooks/useScreenChange'
+import { useProviders } from '../hooks/useProviders'
 import * as atoms from '../stores/atoms'
 import * as sessionActions from '../stores/sessionActions'
 import * as settingActions from '../stores/settingActions'
+import ImageModelSelect from './ImageModelSelect'
+import ProviderImageIcon from './icons/ProviderImageIcon'
 import MiniButton from './MiniButton'
+import ModelSelector from './ModelSelectorNew'
 import Toolbar from './Toolbar'
 
-export default function Header() {
+export type HeaderProps = {
+  model?: {
+    provider: string
+    modelId: string
+  }
+  onSelectModel?(provider: ModelProvider, modelId: string): void
+}
+
+export default function Header(props: HeaderProps = {}) {
+  const { model, onSelectModel } = props
   const { t } = useTranslation()
   const theme = useTheme()
   const currentSession = useAtomValue(atoms.currentSessionAtom)
   const [showSidebar, setShowSidebar] = useAtom(atoms.showSidebarAtom)
+  
 
   const isSmallScreen = useIsSmallScreen()
+  const { providers } = useProviders()
 
   const { needRoomForMacWindowControls, needRoomForWindowsWindowControls } = useNeedRoomForWinControls()
+  // Model display text logic (similar to InputBox)
+  const modelSelectorDisplayText = useMemo(() => {
+    if (!model) {
+      return t('Select Model')
+    }
+    const providerInfo = providers.find((p) => p.id === model.provider)
+    const modelInfo = providerInfo?.models?.find((m) => m.modelId === model.modelId)
+    return `${modelInfo?.nickname || model.modelId}`
+  }, [providers, model, t])
+
+  // Short model display text for small screens
+  const shortModelDisplayText = useMemo(() => {
+    if (!modelSelectorDisplayText || modelSelectorDisplayText === t('Select Model')) {
+      return modelSelectorDisplayText
+    }
+    const parts = modelSelectorDisplayText.split('/')
+    return parts[parts.length - 1]
+  }, [modelSelectorDisplayText, t])
+
+  // Model selection error tip
+  const [showSelectModelErrorTip, setShowSelectModelErrorTip] = useState(false)
+  useEffect(() => {
+    if (showSelectModelErrorTip) {
+      const clickEventListener = () => {
+        setShowSelectModelErrorTip(false)
+        document.removeEventListener('click', clickEventListener)
+      }
+      document.addEventListener('click', clickEventListener)
+      return () => {
+        document.removeEventListener('click', clickEventListener)
+      }
+    }
+  }, [showSelectModelErrorTip])
+
+  // Listen for model validation events from InputBox
+  useEffect(() => {
+    const handleModelValidation = () => {
+      if (currentSession && !currentSession.settings?.provider) {
+        setShowSelectModelErrorTip(true)
+      }
+    }
+    
+    window.addEventListener('model-validation-needed', handleModelValidation)
+    return () => {
+      window.removeEventListener('model-validation-needed', handleModelValidation)
+    }
+  }, [currentSession])
 
   // 会话名称自动生成
   useEffect(() => {
@@ -62,17 +126,17 @@ export default function Header() {
   let EditButton: React.ReactNode | null = null
   if (currentSession && isChatSession(currentSession) && currentSession.settings) {
     EditButton = (
-      <Tooltip title={t('Current conversation configured with specific model settings')} className="cursor-pointer">
+      <MuiTooltip title={t('Current conversation configured with specific model settings')} className="cursor-pointer">
         <EditIcon
           className="ml-1 cursor-pointer w-4 h-4 opacity-30"
           fontSize="small"
           style={{ color: theme.palette.warning.main }}
         />
-      </Tooltip>
+      </MuiTooltip>
     )
   } else if (currentSession && isPictureSession(currentSession)) {
     EditButton = (
-      <Tooltip
+      <MuiTooltip
         title={t('The Image Creator plugin has been activated for the current conversation')}
         className="cursor-pointer"
       >
@@ -84,7 +148,7 @@ export default function Header() {
           icon={<ImageIcon className="cursor-pointer" />}
           label={<span className="cursor-pointer">{t('Image Creator')}</span>}
         />
-      </Tooltip>
+      </MuiTooltip>
     )
   } else {
     EditButton = <EditIcon className="ml-1 cursor-pointer w-4 h-4 opacity-30" fontSize="small" />
@@ -92,78 +156,140 @@ export default function Header() {
 
   return (
     <div
-      className={cn(
-        // 固定高度，和 Windows 的 win controls bar 高度一致
-        'title-bar flex flex-row h-12 items-center',
-        isSmallScreen ? '' : showSidebar ? 'sm:pl-3 sm:pr-2' : 'pr-2',
-        (!showSidebar || isSmallScreen) && needRoomForMacWindowControls ? 'pl-20' : 'pl-3'
-      )}
+      className={cn('title-bar flex flex-col')}
       style={{
         borderBottomWidth: '1px',
         borderBottomStyle: 'solid',
         borderBottomColor: theme.palette.divider,
       }}
     >
-      {(!showSidebar || isSmallScreen) && (
-        <Box className={cn('controls cursor-pointer')} onClick={() => setShowSidebar(!showSidebar)}>
-          <IconButton
-            sx={
-              isSmallScreen
-                ? {
-                    borderColor: theme.palette.action.hover,
-                    borderStyle: 'solid',
-                    borderWidth: 1,
-                  }
-                : {}
-            }
-          >
-            <PanelRightClose size="20" strokeWidth={1.5} />
-          </IconButton>
-        </Box>
-      )}
-      <div className={cn('w-full flex flex-row flex-grow pt-2 pb-2')}>
-        <div className="flex flex-row items-center w-0 flex-1 mr-1">
-          <Typography
-            variant="h6"
-            noWrap
-            className={cn(
-              'flex-shrink flex-grow-0 overflow-hidden text-ellipsis whitespace-nowrap',
-              showSidebar ? 'ml-3' : 'ml-1'
-            )}
-          >
-            {currentSession?.name}
-          </Typography>
-          {isSmallScreen ? (
-            <MiniButton
-              className="ml-1 sm:ml-2 controls cursor-pointer"
-              style={{ color: theme.palette.text.secondary }}
-              onClick={() => {
-                editCurrentSession()
-              }}
-              tooltipTitle={
-                <div className="text-center inline-block">
-                  <span>{t('Customize settings for the current conversation')}</span>
-                </div>
+      {/* Title bar row */}
+      <div
+        className={cn(
+          // 固定高度，和 Windows 的 win controls bar 高度一致
+          'flex flex-row h-12 items-center',
+          isSmallScreen ? '' : showSidebar ? 'sm:pl-3 sm:pr-2' : 'pr-2',
+          (!showSidebar || isSmallScreen) && needRoomForMacWindowControls ? 'pl-20' : 'pl-3'
+        )}
+      >
+        {(!showSidebar || isSmallScreen) && (
+          <Box className={cn('controls cursor-pointer')} onClick={() => setShowSidebar(!showSidebar)}>
+            <IconButton
+              sx={
+                isSmallScreen
+                  ? {
+                      borderColor: theme.palette.action.hover,
+                      borderStyle: 'solid',
+                      borderWidth: 1,
+                    }
+                  : {}
               }
-              tooltipPlacement="top"
             >
-              <Settings2 size="16" strokeWidth={1} />
-            </MiniButton>
-          ) : (
-            <a
-              onClick={() => {
-                editCurrentSession()
+              <PanelRightClose size="20" strokeWidth={1.5} />
+            </IconButton>
+          </Box>
+        )}
+        <div className={cn('w-full flex flex-row flex-grow pt-2 pb-2')}>
+          <div className="flex flex-row items-center w-0 flex-1 mr-1">
+            <Typography
+              variant="h6"
+              noWrap
+              className={cn(
+                'flex-shrink flex-grow-0 overflow-hidden text-ellipsis whitespace-nowrap',
+                showSidebar ? 'ml-3' : 'ml-1'
+              )}
+              sx={{
+                fontSize: '14px',
               }}
-              className="controls flex mr-8 cursor-pointer"
             >
-              {EditButton}
-            </a>
-          )}
-        </div>
-        <div className={cn('flex-shrink-0', needRoomForWindowsWindowControls ? 'mr-36' : '')}>
-          <Toolbar />
+              {currentSession?.name}
+            </Typography>
+            {isSmallScreen ? (
+              <MiniButton
+                className="ml-1 sm:ml-2 controls cursor-pointer"
+                style={{ color: theme.palette.text.secondary }}
+                onClick={() => {
+                  editCurrentSession()
+                }}
+                tooltipTitle={
+                  <div className="text-center inline-block">
+                    <span>{t('Customize settings for the current conversation')}</span>
+                  </div>
+                }
+                tooltipPlacement="top"
+              >
+                <Settings2 size="16" strokeWidth={1} />
+              </MiniButton>
+            ) : (
+              <a
+                onClick={() => {
+                  editCurrentSession()
+                }}
+                className="controls flex mr-8 cursor-pointer"
+              >
+                {EditButton}
+              </a>
+            )}
+          </div>
+          <div className={cn('flex-shrink-0', needRoomForWindowsWindowControls ? 'mr-36' : '')}>
+            <Toolbar />
+          </div>
         </div>
       </div>
+
+      {/* Model selector row */}
+      {currentSession && onSelectModel && (
+        <div
+          className={cn(
+            'flex flex-row items-center py-1 pb-2 relative z-10 controls',
+            isSmallScreen ? 'px-3' : showSidebar ? 'sm:pl-6 sm:pr-5' : 'pl-3 pr-5',
+            (!showSidebar || isSmallScreen) && needRoomForMacWindowControls ? 'pl-20' : ''
+          )}
+        >
+          {/* 与标题对齐的容器 */}
+          <div 
+            className={cn('flex items-center controls', showSidebar && !isSmallScreen ? 'ml-3' : 'ml-1')}
+          >
+            <Tooltip
+              label={t('Please select a model')}
+              color="red"
+              opened={showSelectModelErrorTip}
+              withArrow
+            >
+              {currentSession.type === 'picture' ? (
+                <ImageModelSelect onSelect={onSelectModel}>
+                  <span 
+                    className="flex items-center text-sm opacity-70 cursor-pointer bg-transparent hover:bg-slate-400/25 h-6 px-2 py-1 rounded controls"
+                  >
+                    {providers.find((p) => p.id === model?.provider)?.name || model?.provider || t('Select Model')}
+                    <IconSelector size={16} className="opacity-50 ml-1" />
+                  </span>
+                </ImageModelSelect>
+              ) : (
+                <ModelSelector onSelect={onSelectModel}>
+                  <Flex
+                    gap="xs"
+                    px="xs"
+                    py="xs"
+                    align="center"
+                    justify="flex-start"
+                    className="cursor-pointer hover:bg-slate-400/25 rounded-lg min-h-[32px] controls"
+                  >
+                    {!!model && <ProviderImageIcon size={16} provider={model.provider} />}
+                    <Text size="sm" className="line-clamp-1">
+                      {isSmallScreen ? shortModelDisplayText : modelSelectorDisplayText}
+                    </Text>
+                    <IconSelector
+                      size={16}
+                      className="flex-[0_0_auto] text-[var(--mantine-color-chatbox-tertiary-text)]"
+                    />
+                  </Flex>
+                </ModelSelector>
+              )}
+            </Tooltip>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

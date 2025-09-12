@@ -10,7 +10,9 @@ import {
   MemoryCollection, 
   AnalysisConfig, 
   DEFAULT_ANALYSIS_CONFIG,
-  MessageBatch
+  MessageBatch,
+  ConversationSummary,
+  NovelOutline
 } from './types'
 
 export class MemoryAnalyzer {
@@ -29,30 +31,40 @@ export class MemoryAnalyzer {
     const messages = this.filterMessages(session.messages)
     const memories: MemoryItem[] = []
     const events: EventItem[] = []
+    let conversationSummary: ConversationSummary | undefined
+    let novelOutline: NovelOutline | undefined
 
     if (this.config.useAIAnalysis && this.settings) {
-      // 使用AI批处理分析
-      try {
-        const batches = this.createMessageBatches(messages)
-        console.log(`分批处理: ${batches.length} 个批次，共 ${messages.length} 条消息`)
+      // 根据分析模式选择不同的分析方法
+      switch (this.config.analysisMode) {
+        case 'conversation_summary':
+          console.log(`对话总结模式: 共 ${messages.length} 条消息`)
+          conversationSummary = await this.analyzeConversationSummary(messages)
+          break
         
-        for (const batch of batches) {
-          const batchResults = await this.analyzeBatchWithAI(batch)
-          memories.push(...batchResults.memories)
-          events.push(...batchResults.events)
-        }
-      } catch (error) {
-        console.error('AI批处理分析失败:', error)
-        throw error
+        case 'novel_outline':
+          console.log(`小说大纲模式: 共 ${messages.length} 条消息`)
+          novelOutline = await this.analyzeNovelOutline(messages)
+          break
+        
+        default:
+          // 默认模式：使用AI统一分析所有消息
+          console.log(`统一分析模式: 共 ${messages.length} 条消息`)
+          try {
+            const unifiedResults = await this.analyzeAllMessagesUnified(messages)
+            memories.push(...unifiedResults.memories)
+            events.push(...unifiedResults.events)
+          } catch (error) {
+            console.error('AI统一分析失败:', error)
+            throw error
+          }
+          break
       }
-    } else {
-      // 使用正则表达式逐条分析
-      return this.analyzeSessionWithRegex(session, messages)
     }
 
-    // 过滤和排序
-    const filteredMemories = this.filterAndRankMemories(memories)
-    const filteredEvents = this.filterAndRankEvents(events)
+    // 过滤和排序（仅对默认模式）
+    const filteredMemories = this.config.analysisMode === 'default' ? this.filterAndRankMemories(memories) : []
+    const filteredEvents = this.config.analysisMode === 'default' ? this.filterAndRankEvents(events) : []
 
     // 生成总结
     const summary = this.generateSummary(session, filteredMemories, filteredEvents)
@@ -67,8 +79,11 @@ export class MemoryAnalyzer {
       summary,
       totalMessages: session.messages.length,
       analyzedMessages: messages.length,
+      conversationSummary,
+      novelOutline,
     }
   }
+
 
   /**
    * 过滤消息
@@ -82,101 +97,11 @@ export class MemoryAnalyzer {
     })
   }
 
-  /**
-   * 创建消息批次
-   */
-  private createMessageBatches(messages: Message[]): MessageBatch[] {
-    const batches: MessageBatch[] = []
-    let currentBatch: Message[] = []
-    let currentLength = 0
-    const maxTokens = this.config.maxBatchTokens
-    const tokensPerChar = this.config.estimatedTokensPerChar
-
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i]
-      const messageText = getMessageText(message)
-      
-      if (!messageText || messageText.trim().length < 10) {
-        continue
-      }
-
-      const messageLength = messageText.length
-      const estimatedTokens = messageLength * tokensPerChar
-
-      // 如果添加这条消息会超过限制，先处理当前批次
-      if (currentBatch.length > 0 && currentLength + estimatedTokens > maxTokens) {
-        batches.push({
-          messages: [...currentBatch],
-          totalLength: currentLength,
-          startIndex: batches.length > 0 ? batches[batches.length - 1].endIndex + 1 : 0,
-          endIndex: i - 1
-        })
-        currentBatch = []
-        currentLength = 0
-      }
-
-      currentBatch.push(message)
-      currentLength += estimatedTokens
-    }
-
-    // 处理最后一个批次
-    if (currentBatch.length > 0) {
-      batches.push({
-        messages: currentBatch,
-        totalLength: currentLength,
-        startIndex: batches.length > 0 ? batches[batches.length - 1].endIndex + 1 : 0,
-        endIndex: messages.length - 1
-      })
-    }
-
-    return batches
-  }
 
   /**
-   * 使用正则表达式分析会话（备选方案）
+   * 使用AI统一分析所有消息
    */
-  private async analyzeSessionWithRegex(session: Session, messages: Message[]): Promise<MemoryCollection> {
-    const memories: MemoryItem[] = []
-    const events: EventItem[] = []
-
-    // 逐条分析消息
-    for (const message of messages) {
-      const messageText = getMessageText(message)
-      if (!messageText || messageText.trim().length < 10) continue
-
-      // 提取记忆信息
-      const extractedMemories = this.extractMemoriesWithRegex(message, messageText)
-      memories.push(...extractedMemories)
-
-      // 提取事件信息  
-      const extractedEvents = this.extractEventsWithRegex(message, messageText)
-      events.push(...extractedEvents)
-    }
-
-    // 过滤和排序
-    const filteredMemories = this.filterAndRankMemories(memories)
-    const filteredEvents = this.filterAndRankEvents(events)
-
-    // 生成总结
-    const summary = this.generateSummary(session, filteredMemories, filteredEvents)
-
-    return {
-      sessionId: session.id,
-      copilotId: session.copilotId || '',
-      copilotName: session.name,
-      collectedAt: Date.now(),
-      memories: filteredMemories,
-      events: filteredEvents,
-      summary,
-      totalMessages: session.messages.length,
-      analyzedMessages: messages.length,
-    }
-  }
-
-  /**
-   * 使用AI批量分析消息批次
-   */
-  private async analyzeBatchWithAI(batch: MessageBatch): Promise<{ memories: MemoryItem[], events: EventItem[] }> {
+  private async analyzeAllMessagesUnified(messages: Message[]): Promise<{ memories: MemoryItem[], events: EventItem[] }> {
     if (!this.settings) {
       throw new Error('Settings not provided for AI analysis')
     }
@@ -184,70 +109,79 @@ export class MemoryAnalyzer {
     const memories: MemoryItem[] = []
     const events: EventItem[] = []
 
-    // 构建批次上下文
-    const conversationContext = batch.messages.map((msg, index) => {
+    // 构建完整的对话上下文
+    const conversationContext = messages.map((msg, index) => {
       const text = getMessageText(msg)
-      const role = msg.role === 'user' ? '用户' : 'AI助手'
+      if (!text || text.trim().length < 10) {
+        return null
+      }
+      const role = msg.role === 'user' ? 'user' : 'assistant'
       return `${index + 1}. 【${role}】: ${text}`
-    }).join('\n\n')
+    }).filter(Boolean).join('\n\n')
 
-    // 分别分析记忆和事件
-    const [batchMemories, batchEvents] = await Promise.all([
-      this.extractMemoriesFromBatch(batch, conversationContext),
-      this.extractEventsFromBatch(batch, conversationContext)
+    if (!conversationContext.trim()) {
+      return { memories, events }
+    }
+
+    // 同时分析记忆和事件
+    const [unifiedMemories, unifiedEvents] = await Promise.all([
+      this.extractMemoriesFromUnifiedContext(messages, conversationContext),
+      this.extractEventsFromUnifiedContext(messages, conversationContext)
     ])
 
-    memories.push(...batchMemories)
-    events.push(...batchEvents)
+    memories.push(...unifiedMemories)
+    events.push(...unifiedEvents)
 
     return { memories, events }
   }
 
   /**
-   * 从消息批次中提取记忆信息
+   * 从统一的对话上下文中提取记忆信息
    */
-  private async extractMemoriesFromBatch(batch: MessageBatch, conversationContext: string): Promise<MemoryItem[]> {
+  private async extractMemoriesFromUnifiedContext(messages: Message[], conversationContext: string): Promise<MemoryItem[]> {
     const memoryTypesDescription = this.config.enabledMemoryTypes.map(type => {
       switch (type) {
-        case 'personal': return '个人信息：姓名、身份、背景、基本情况等'
-        case 'preference': return '偏好信息：喜好、观点、态度、倾向等'
-        case 'skill': return '技能信息：能力、专长、经验、学习内容等'
-        case 'relationship': return '关系信息：家人、朋友、同事、社交关系等'
-        case 'other': return '其他信息：不属于上述类别的重要个人信息'
+        case 'personal': return 'personal: name, identity, background, basic_info'
+        case 'preference': return 'preference: likes, opinions, attitudes, tendencies'
+        case 'skill': return 'skill: abilities, expertise, experience, learning_content'
+        case 'relationship': return 'relationship: family, friends, colleagues, social_connections'
+        case 'other': return 'other: important_personal_info not in above categories'
         default: return type
       }
     }).join('\n- ')
 
-    const prompt = createMessage('user', `你是一个专业的对话分析专家，请从以下对话片段中提取重要的个人记忆信息。
+    const prompt = createMessage('user', `Extract personal memory information from conversation data.
 
-分析原则：
-1. 只提取明确表达的、有价值的个人信息，避免推测或假设
-2. 记忆内容应该是可以用于后续对话的有用信息
-3. 置信度反映信息的明确程度和重要性：
-   - 0.9-1.0: 非常明确的个人信息（姓名、职业、明确的技能等）
-   - 0.7-0.8: 比较明确的偏好或经验
-   - 0.5-0.6: 暗示性的信息或倾向
-   - 低于0.5的信息应该被过滤掉
-4. 对于批量对话，要注意上下文关系，避免重复提取相似信息
+ANALYSIS_RULES:
+1. extract_explicit_valuable_info(avoid_speculation=true, avoid_assumptions=true)
+2. memory_content.should_be_useful_for_future_conversations()
+3. confidence_score.reflects(clarity_level, importance_level):
+   - 0.9-1.0: explicit_personal_info(name, profession, clear_skills)
+   - 0.7-0.8: clear_preferences_or_experiences
+   - 0.5-0.6: implied_info_or_tendencies
+   - filter_out(confidence < 0.5)
+4. for_complete_conversation.avoid_duplicate_similar_info()
 
-记忆类型说明：
+MEMORY_TYPES:
 - ${memoryTypesDescription}
 
-对话内容（共${batch.messages.length}条消息）：
+CONVERSATION_DATA (${messages.length} messages):
 ${conversationContext}
 
-输出要求：严格按照以下JSON数组格式输出，不要添加任何其他文字：
+IMPORTANT: Output all content and tags in Chinese language.
+
+OUTPUT_FORMAT (strict JSON array, no additional text):
 [
   {
-    "type": "记忆类型",
-    "content": "记忆的简洁但完整描述",
-    "confidence": 置信度数值,
-    "tags": ["标签1", "标签2"],
-    "sourceIndex": 消息在批次中的索引号（从1开始）
+    "type": "memory_type",
+    "content": "concise_but_complete_description—in Chinese",  
+    "confidence": confidence_value,
+    "tags": ["tag1", "tag2"],
+    "sourceIndex": message_index_in_batch_starting_from_1
   }
 ]
 
-如果没有发现有价值的记忆信息，请返回空数组 []`)
+return [] if no_valuable_memory_found`)
 
     const dependencies = await createModelDependencies()
     const configs = { uuid: '' }
@@ -285,7 +219,7 @@ ${conversationContext}
     for (const aiMemory of aiMemories) {
       if (aiMemory.type && aiMemory.content && typeof aiMemory.confidence === 'number') {
         const sourceIndex = aiMemory.sourceIndex || 1
-        const sourceMessage = batch.messages[sourceIndex - 1] || batch.messages[0]
+        const sourceMessage = messages[sourceIndex - 1] || messages[0]
         
         memories.push(this.createMemoryItem(
           aiMemory.type,
@@ -301,49 +235,51 @@ ${conversationContext}
   }
 
   /**
-   * 从消息批次中提取事件信息
+   * 从统一的对话上下文中提取事件信息
    */
-  private async extractEventsFromBatch(batch: MessageBatch, conversationContext: string): Promise<EventItem[]> {
+  private async extractEventsFromUnifiedContext(messages: Message[], conversationContext: string): Promise<EventItem[]> {
     const eventTypesDescription = this.config.enabledEventTypes.map(type => {
       switch (type) {
-        case 'conversation': return '对话事件：重要的讨论话题、交流内容等'
-        case 'decision': return '决策事件：做出的选择、决定、计划等'
-        case 'achievement': return '成就事件：完成的任务、取得的成果、学到的技能等'
-        case 'problem': return '问题事件：遇到的困难、挑战、需要解决的问题等'
-        case 'other': return '其他事件：不属于上述类别的重要事件'
+        case 'conversation': return 'conversation: important_discussions, communication_content'
+        case 'decision': return 'decision: choices_made, decisions, plans'
+        case 'achievement': return 'achievement: completed_tasks, accomplishments, skills_learned'
+        case 'problem': return 'problem: difficulties_encountered, challenges, issues_to_solve'
+        case 'other': return 'other: important_events not in above categories'
         default: return type
       }
     }).join('\n- ')
 
-    const prompt = createMessage('user', `你是一个专业的对话分析专家，请从以下对话片段中提取重要的事件信息。
+    const prompt = createMessage('user', `Extract important event information from conversation data.
 
-分析原则：
-1. 只提取有实际意义的具体事件，避免过于琐碎的日常交流
-2. 事件应该对理解用户或对话历史有价值
-3. 准确区分不同类型的事件，避免模糊分类
-4. 参与者应该明确，结果描述要客观
-5. 对于批量对话，要关注事件的时间序列和因果关系
+ANALYSIS_RULES:
+1. extract_meaningful_concrete_events(avoid_trivial_daily_exchanges=true)
+2. events.should_be_valuable_for_understanding(user_context=true, conversation_history=true)
+3. classify_event_types_accurately(avoid_ambiguous_classification=true)
+4. participants.should_be_explicit(), outcome.should_be_objective()
+5. for_complete_conversation.focus_on(temporal_sequence=true, causal_relationships=true)
 
-事件类型标准：
+EVENT_TYPE_STANDARDS:
 - ${eventTypesDescription}
 
-对话内容（共${batch.messages.length}条消息）：
+CONVERSATION_DATA (${messages.length} messages):
 ${conversationContext}
 
-输出要求：严格按照以下JSON数组格式输出，不要添加任何其他文字：
+IMPORTANT: Output all content, titles, descriptions and tags in Chinese language.
+
+OUTPUT_FORMAT (strict JSON array, no additional text):
 [
   {
-    "type": "事件类型",
-    "title": "事件简要标题",
-    "description": "事件详细描述，包含关键信息",
-    "participants": ["明确的参与者"],
-    "outcome": "事件结果或当前状态（如有）",
-    "tags": ["相关标签"],
-    "sourceIndex": 主要相关消息在批次中的索引号（从1开始）
+    "type": "event_type",
+    "title": "brief_event_title",
+    "description": "detailed_event_description_with_key_info",
+    "participants": ["explicit_participants"],
+    "outcome": "event_result_or_current_status_if_any",
+    "tags": ["related_tags"],
+    "sourceIndex": primary_related_message_index_in_batch_starting_from_1
   }
 ]
 
-如果没有发现有意义的事件，请返回空数组 []`)
+return [] if no_meaningful_events_found`)
 
     const dependencies = await createModelDependencies()
     const configs = { uuid: '' }
@@ -381,7 +317,7 @@ ${conversationContext}
     for (const aiEvent of aiEvents) {
       if (aiEvent.type && aiEvent.title && aiEvent.description) {
         const sourceIndex = aiEvent.sourceIndex || 1
-        const sourceMessage = batch.messages[sourceIndex - 1] || batch.messages[0]
+        const sourceMessage = messages[sourceIndex - 1] || messages[0]
         
         events.push(this.createEventItem(
           aiEvent.type,
@@ -390,7 +326,7 @@ ${conversationContext}
           sourceMessage,
           aiEvent.outcome,
           aiEvent.tags || [],
-          aiEvent.participants || [sourceMessage.role === 'user' ? '用户' : 'AI助手']
+          aiEvent.participants || [sourceMessage.role === 'user' ? 'user' : 'assistant']
         ))
       }
     }
@@ -401,360 +337,99 @@ ${conversationContext}
   /**
    * 使用AI智能提取记忆信息（单条消息，保留用于兼容）
    */
-  private async extractMemoriesWithAI(message: Message, text: string): Promise<MemoryItem[]> {
-    if (!this.settings) {
-      throw new Error('Settings not provided for AI analysis')
-    }
+//   private async extractMemoriesWithAI(message: Message, text: string): Promise<MemoryItem[]> {
+//     if (!this.settings) {
+//       throw new Error('Settings not provided for AI analysis')
+//     }
 
-    const memoryTypesDescription = this.config.enabledMemoryTypes.map(type => {
-      switch (type) {
-        case 'personal': return '个人信息：姓名、身份、背景、基本情况等'
-        case 'preference': return '偏好信息：喜好、观点、态度、倾向等'
-        case 'skill': return '技能信息：能力、专长、经验、学习内容等'
-        case 'relationship': return '关系信息：家人、朋友、同事、社交关系等'
-        case 'other': return '其他信息：不属于上述类别的重要个人信息'
-        default: return type
-      }
-    }).join('\n- ')
+//     const memoryTypesDescription = this.config.enabledMemoryTypes.map(type => {
+//       switch (type) {
+//         case 'personal': return '个人信息：姓名、身份、背景、基本情况等'
+//         case 'preference': return '偏好信息：喜好、观点、态度、倾向等'
+//         case 'skill': return '技能信息：能力、专长、经验、学习内容等'
+//         case 'relationship': return '关系信息：家人、朋友、同事、社交关系等'
+//         case 'other': return '其他信息：不属于上述类别的重要个人信息'
+//         default: return type
+//       }
+//     }).join('\n- ')
 
-    const prompt = createMessage('user', `你是一个专业的对话分析专家，请从以下对话消息中提取重要的个人记忆信息。
+//     const prompt = createMessage('user', `你是一个专业的对话分析专家，请从以下对话消息中提取重要的个人记忆信息。
 
-分析原则：
-1. 只提取明确表达的、有价值的个人信息，避免推测或假设
-2. 记忆内容应该是可以用于后续对话的有用信息
-3. 置信度反映信息的明确程度和重要性：
-   - 0.9-1.0: 非常明确的个人信息（姓名、职业、明确的技能等）
-   - 0.7-0.8: 比较明确的偏好或经验
-   - 0.5-0.6: 暗示性的信息或倾向
-   - 低于0.5的信息应该被过滤掉
+// 分析原则：
+// 1. 只提取明确表达的、有价值的个人信息，避免推测或假设
+// 2. 记忆内容应该是可以用于后续对话的有用信息
+// 3. 置信度反映信息的明确程度和重要性：
+//    - 0.9-1.0: 非常明确的个人信息（姓名、职业、明确的技能等）
+//    - 0.7-0.8: 比较明确的偏好或经验
+//    - 0.5-0.6: 暗示性的信息或倾向
+//    - 低于0.5的信息应该被过滤掉
 
-记忆类型说明：
-- ${memoryTypesDescription}
+// 记忆类型说明：
+// - ${memoryTypesDescription}
 
-消息内容：
-【${message.role === 'user' ? '用户' : 'AI助手'}】: ${text}
+// 消息内容：
+// 【${message.role === 'user' ? 'user' : 'assistant'}】: ${text}
 
-输出要求：严格按照以下JSON数组格式输出，不要添加任何其他文字：
-[
-  {
-    "type": "记忆类型",
-    "content": "记忆的简洁但完整描述",
-    "confidence": 置信度数值,
-    "tags": ["标签1", "标签2"]
-  }
-]
+// 输出要求：严格按照以下JSON数组格式输出，不要添加任何其他文字：
+// [
+//   {
+//     "type": "记忆类型",
+//     "content": "记忆的简洁但完整描述",
+//     "confidence": 置信度数值,
+//     "tags": ["标签1", "标签2"]
+//   }
+// ]
 
-如果没有发现有价值的记忆信息，请返回空数组 []`)
+// 如果没有发现有价值的记忆信息，请返回空数组 []`)
 
-    const dependencies = await createModelDependencies()
-    const configs = { uuid: '' }
+//     const dependencies = await createModelDependencies()
+//     const configs = { uuid: '' }
     
-    // 使用总结模型进行分析，如果没有配置则使用默认模型
-    const analysisSettings = this.settings!.summaryModel ? {
-      ...this.settings!,
-      provider: this.settings!.summaryModel.provider,
-      modelId: this.settings!.summaryModel.model,
-    } : this.settings!
+//     // 使用总结模型进行分析，如果没有配置则使用默认模型
+//     const analysisSettings = this.settings!.summaryModel ? {
+//       ...this.settings!,
+//       provider: this.settings!.summaryModel.provider,
+//       modelId: this.settings!.summaryModel.model,
+//     } : this.settings!
     
-    const model = getModel(analysisSettings, configs, dependencies)
-    const coreMessages = await convertToCoreMessages([prompt], {
-      modelSupportVision: model.isSupportVision(),
-    })
+//     const model = getModel(analysisSettings, configs, dependencies)
+//     const coreMessages = await convertToCoreMessages([prompt], {
+//       modelSupportVision: model.isSupportVision(),
+//     })
 
-    const result = await model.chat(coreMessages, {})
-    const responseText = result.contentParts
-      .filter((part) => part.type === 'text')
-      .map((part) => part.text)
-      .join('')
+//     const result = await model.chat(coreMessages, {})
+//     const responseText = result.contentParts
+//       .filter((part) => part.type === 'text')
+//       .map((part) => part.text)
+//       .join('')
     
-    // 解析AI返回的JSON
-    let aiMemories: any[]
-    try {
-      // 尝试解析JSON，支持markdown代码块格式
-      const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim()
-      aiMemories = JSON.parse(jsonText)
-    } catch (error) {
-      throw new Error(`AI返回的不是有效JSON格式: ${responseText}`)
-    }
+//     // 解析AI返回的JSON
+//     let aiMemories: any[]
+//     try {
+//       // 尝试解析JSON，支持markdown代码块格式
+//       const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim()
+//       aiMemories = JSON.parse(jsonText)
+//     } catch (error) {
+//       throw new Error(`AI返回的不是有效JSON格式: ${responseText}`)
+//     }
 
-    // 转换为MemoryItem格式
-    const memories: MemoryItem[] = []
-    for (const aiMemory of aiMemories) {
-      if (aiMemory.type && aiMemory.content && typeof aiMemory.confidence === 'number') {
-        memories.push(this.createMemoryItem(
-          aiMemory.type,
-          aiMemory.content,
-          message,
-          aiMemory.confidence,
-          aiMemory.tags || []
-        ))
-      }
-    }
+//     // 转换为MemoryItem格式
+//     const memories: MemoryItem[] = []
+//     for (const aiMemory of aiMemories) {
+//       if (aiMemory.type && aiMemory.content && typeof aiMemory.confidence === 'number') {
+//         memories.push(this.createMemoryItem(
+//           aiMemory.type,
+//           aiMemory.content,
+//           message,
+//           aiMemory.confidence,
+//           aiMemory.tags || []
+//         ))
+//       }
+//     }
 
-    return memories
-  }
+//     return memories
+//   }
 
-  /**
-   * 使用正则表达式提取记忆信息（备选方案）
-   */
-  private extractMemoriesWithRegex(message: Message, text: string): MemoryItem[] {
-    const memories: MemoryItem[] = []
-
-    // 个人信息模式
-    const personalPatterns = [
-      /我是|我叫|我的名字是|我来自|我在(.{1,20})(工作|学习|生活)/gi,
-      /我喜欢|我不喜欢|我讨厌|我热爱|我的爱好是/gi,
-      /我的专业是|我学的是|我研究|我擅长/gi,
-    ]
-
-    // 偏好信息模式
-    const preferencePatterns = [
-      /我觉得|我认为|我比较喜欢|我更倾向于/gi,
-      /我的看法是|我的观点是|对我来说/gi,
-    ]
-
-    // 技能信息模式
-    const skillPatterns = [
-      /我会|我能|我掌握|我了解|我熟悉/gi,
-      /我学过|我做过|我有经验/gi,
-    ]
-
-    // 关系信息模式
-    const relationshipPatterns = [
-      /我的(朋友|同事|家人|父母|孩子|伴侣)/gi,
-      /和我的|跟我的/gi,
-    ]
-
-    // 分析个人信息
-    if (this.config.enabledMemoryTypes.includes('personal')) {
-      for (const pattern of personalPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          memories.push(this.createMemoryItem('personal', match[0], message, 0.8))
-        }
-      }
-    }
-
-    // 分析偏好信息
-    if (this.config.enabledMemoryTypes.includes('preference')) {
-      for (const pattern of preferencePatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          memories.push(this.createMemoryItem('preference', match[0], message, 0.7))
-        }
-      }
-    }
-
-    // 分析技能信息
-    if (this.config.enabledMemoryTypes.includes('skill')) {
-      for (const pattern of skillPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          memories.push(this.createMemoryItem('skill', match[0], message, 0.8))
-        }
-      }
-    }
-
-    // 分析关系信息
-    if (this.config.enabledMemoryTypes.includes('relationship')) {
-      for (const pattern of relationshipPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          memories.push(this.createMemoryItem('relationship', match[0], message, 0.7))
-        }
-      }
-    }
-
-    return memories
-  }
-
-  /**
-   * 从消息中提取事件信息
-   */
-  private async extractEvents(message: Message, text: string): Promise<EventItem[]> {
-    // 如果启用AI分析，优先使用AI
-    if (this.config.useAIAnalysis && this.settings) {
-      try {
-        return await this.extractEventsWithAI(message, text)
-      } catch (error) {
-        console.error('AI事件提取失败:', error)
-        return []
-      }
-    }
-
-    // 使用正则表达式模式作为备选方案
-    return this.extractEventsWithRegex(message, text)
-  }
-
-  /**
-   * 使用AI智能提取事件信息
-   */
-  private async extractEventsWithAI(message: Message, text: string): Promise<EventItem[]> {
-    if (!this.settings) {
-      throw new Error('Settings not provided for AI analysis')
-    }
-
-    const eventTypesDescription = this.config.enabledEventTypes.map(type => {
-      switch (type) {
-        case 'conversation': return '对话事件：重要的讨论话题、交流内容等'
-        case 'decision': return '决策事件：做出的选择、决定、计划等'
-        case 'achievement': return '成就事件：完成的任务、取得的成果、学到的技能等'
-        case 'problem': return '问题事件：遇到的困难、挑战、需要解决的问题等'
-        case 'other': return '其他事件：不属于上述类别的重要事件'
-        default: return type
-      }
-    }).join('\n- ')
-
-    const prompt = createMessage('user', `你是一个专业的对话分析专家，请从以下对话消息中提取重要的事件信息。
-
-分析原则：
-1. 只提取有实际意义的具体事件，避免过于琐碎的日常交流
-2. 事件应该对理解用户或对话历史有价值
-3. 准确区分不同类型的事件，避免模糊分类
-4. 参与者应该明确，结果描述要客观
-
-事件类型标准：
-- ${eventTypesDescription}
-
-消息内容：
-【${message.role === 'user' ? '用户' : 'AI助手'}】: ${text}
-
-输出要求：严格按照以下JSON数组格式输出，不要添加任何其他文字：
-[
-  {
-    "type": "事件类型",
-    "title": "事件简要标题",
-    "description": "事件详细描述，包含关键信息",
-    "participants": ["明确的参与者"],
-    "outcome": "事件结果或当前状态（如有）",
-    "tags": ["相关标签"]
-  }
-]
-
-如果没有发现有意义的事件，请返回空数组 []`)
-
-    const dependencies = await createModelDependencies()
-    const configs = { uuid: '' }
-    
-    // 使用总结模型进行分析，如果没有配置则使用默认模型
-    const analysisSettings = this.settings!.summaryModel ? {
-      ...this.settings!,
-      provider: this.settings!.summaryModel.provider,
-      modelId: this.settings!.summaryModel.model,
-    } : this.settings!
-    
-    const model = getModel(analysisSettings, configs, dependencies)
-    const coreMessages = await convertToCoreMessages([prompt], {
-      modelSupportVision: model.isSupportVision(),
-    })
-
-    const result = await model.chat(coreMessages, {})
-    const responseText = result.contentParts
-      .filter((part) => part.type === 'text')
-      .map((part) => part.text)
-      .join('')
-    
-    // 解析AI返回的JSON
-    let aiEvents: any[]
-    try {
-      // 尝试解析JSON，支持markdown代码块格式
-      const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim()
-      aiEvents = JSON.parse(jsonText)
-    } catch (error) {
-      throw new Error(`AI返回的不是有效JSON格式: ${responseText}`)
-    }
-
-    // 转换为EventItem格式
-    const events: EventItem[] = []
-    for (const aiEvent of aiEvents) {
-      if (aiEvent.type && aiEvent.title && aiEvent.description) {
-        events.push(this.createEventItem(
-          aiEvent.type,
-          aiEvent.title,
-          aiEvent.description,
-          message,
-          aiEvent.outcome,
-          aiEvent.tags || [],
-          aiEvent.participants || [message.role === 'user' ? '用户' : 'AI助手']
-        ))
-      }
-    }
-
-    return events
-  }
-
-  /**
-   * 使用正则表达式提取事件信息（备选方案）
-   */
-  private extractEventsWithRegex(message: Message, text: string): EventItem[] {
-    const events: EventItem[] = []
-
-    // 对话事件模式
-    const conversationPatterns = [
-      /我们讨论了|我们聊了|我们谈到/gi,
-      /关于(.{1,30})这个话题/gi,
-    ]
-
-    // 决策事件模式
-    const decisionPatterns = [
-      /我决定|我选择了|我打算|我计划/gi,
-      /最终我|经过考虑/gi,
-    ]
-
-    // 成就事件模式
-    const achievementPatterns = [
-      /我完成了|我做到了|我成功|我实现了/gi,
-      /我学会了|我掌握了|我解决了/gi,
-    ]
-
-    // 问题事件模式
-    const problemPatterns = [
-      /我遇到了|我碰到|出现了问题|有个问题/gi,
-      /困难|挑战|难题/gi,
-    ]
-
-    // 分析对话事件
-    if (this.config.enabledEventTypes.includes('conversation')) {
-      for (const pattern of conversationPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          events.push(this.createEventItem('conversation', '对话讨论', match[0], message))
-        }
-      }
-    }
-
-    // 分析决策事件
-    if (this.config.enabledEventTypes.includes('decision')) {
-      for (const pattern of decisionPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          events.push(this.createEventItem('decision', '做出决策', match[0], message))
-        }
-      }
-    }
-
-    // 分析成就事件
-    if (this.config.enabledEventTypes.includes('achievement')) {
-      for (const pattern of achievementPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          events.push(this.createEventItem('achievement', '取得成就', match[0], message))
-        }
-      }
-    }
-
-    // 分析问题事件
-    if (this.config.enabledEventTypes.includes('problem')) {
-      for (const pattern of problemPatterns) {
-        const matches = text.matchAll(pattern)
-        for (const match of matches) {
-          events.push(this.createEventItem('problem', '遇到问题', match[0], message))
-        }
-      }
-    }
-
-    return events
-  }
 
   /**
    * 创建记忆项
@@ -794,7 +469,7 @@ ${conversationContext}
       type,
       title,
       description: description.trim(),
-      participants: participants || [message.role === 'user' ? '用户' : 'AI助手'],
+      participants: participants || [message.role === 'user' ? 'user' : 'assistant'],
       source: message.id,
       timestamp: message.timestamp || Date.now(),
       context: getMessageText(message),
@@ -866,5 +541,192 @@ ${conversationContext}
     }
 
     return parts.join('，') || '未收集到关键信息'
+  }
+
+  /**
+   * 分析对话总结（包含情绪分析）
+   */
+  private async analyzeConversationSummary(messages: Message[]): Promise<ConversationSummary> {
+    if (!this.settings) {
+      throw new Error('Settings not provided for conversation summary analysis')
+    }
+
+    // 构建完整的对话上下文
+    const conversationContext = messages.map((msg, index) => {
+      const text = getMessageText(msg)
+      if (!text || text.trim().length < 10) {
+        return null
+      }
+      const role = msg.role === 'user' ? 'user' : 'assistant'
+      return `${index + 1}. 【${role}】: ${text}`
+    }).filter(Boolean).join('\n\n')
+
+    if (!conversationContext.trim()) {
+      throw new Error('没有有效的对话内容可以分析')
+    }
+
+    const prompt = createMessage('user', `Analyze conversation data comprehensively, focusing on content and emotional information.
+
+ANALYSIS_REQUIREMENTS:
+1. extract_main_topics_and_key_information_points()
+2. analyze_overall_emotional_tone_and_participant_emotional_states()
+3. summarize_conversation_flow_and_main_conclusions()
+4. describe_emotional_changes_and_conversation_dynamics(objective=true, accurate=true)
+
+CONVERSATION_DATA (${messages.length} messages):
+${conversationContext}
+
+IMPORTANT: Output all content in Chinese language.
+
+OUTPUT_FORMAT (strict JSON, no additional text):
+{
+  "mainTopics": ["main_topic_1", "main_topic_2", "main_topic_3"],
+  "keyInformation": ["key_info_point_1", "key_info_point_2", "key_info_point_3"],
+  "emotionalTone": {
+    "overall": "positive|negative|neutral|mixed",
+    "details": "detailed_emotional_description_including_changes_and_characteristics"
+  },
+  "participantMoods": {
+    "user": "user_emotional_state_and_characteristics_description",
+    "assistant": "assistant_emotional_state_and_characteristics_description"
+  },
+  "conversationFlow": "conversation_flow_summary_including_start_development_end_process",
+  "conclusions": ["conversation_conclusion_1", "conversation_conclusion_2", "conversation_conclusion_3"]
+}`)
+
+    const dependencies = await createModelDependencies()
+    const configs = { uuid: '' }
+    
+    const analysisSettings = this.settings!.summaryModel ? {
+      ...this.settings!,
+      provider: this.settings!.summaryModel.provider,
+      modelId: this.settings!.summaryModel.model,
+    } : this.settings!
+    
+    const model = getModel(analysisSettings, configs, dependencies)
+    const coreMessages = await convertToCoreMessages([prompt], {
+      modelSupportVision: model.isSupportVision(),
+    })
+
+    const result = await model.chat(coreMessages, {})
+    const responseText = result.contentParts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('')
+    
+    // 解析AI返回的JSON
+    try {
+      const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim()
+      const summary: ConversationSummary = JSON.parse(jsonText)
+      return summary
+    } catch (error) {
+      throw new Error(`AI返回的不是有效JSON格式: ${responseText}`)
+    }
+  }
+
+  /**
+   * 分析小说大纲
+   */
+  private async analyzeNovelOutline(messages: Message[]): Promise<NovelOutline> {
+    if (!this.settings) {
+      throw new Error('Settings not provided for novel outline analysis')
+    }
+
+    // 构建完整的对话上下文
+    const conversationContext = messages.map((msg, index) => {
+      const text = getMessageText(msg)
+      if (!text || text.trim().length < 10) {
+        return null
+      }
+      const role = msg.role === 'user' ? 'user' : 'assistant'
+      return `${index + 1}. 【${role}】: ${text}`
+    }).filter(Boolean).join('\n\n')
+
+    if (!conversationContext.trim()) {
+      throw new Error('没有有效的对话内容可以分析')
+    }
+
+    const prompt = createMessage('user', `Extract and analyze novel creation elements from conversation data to construct complete novel outline.
+
+ANALYSIS_REQUIREMENTS:
+1. identify_novel_genre_theme_and_worldview_settings()
+2. extract_main_characters_with_traits_and_roles()
+3. analyze_plot_structure(beginning=true, development=true, climax=true, ending=true)
+4. identify_themes_and_conflict_types()
+5. extract_key_scenes_and_important_plot_points()
+
+CONVERSATION_DATA (${messages.length} messages):
+${conversationContext}
+
+IMPORTANT: Output all content in Chinese language.
+
+OUTPUT_FORMAT (strict JSON, no additional text):
+{
+  "genre": "novel_genre_or_theme_like_fantasy_scifi_realism",
+  "setting": {
+    "time": "time_background_setting",
+    "place": "location_background_setting", 
+    "worldBuilding": "detailed_worldview_and_background_setting_description"
+  },
+  "characters": [
+    {
+      "name": "character_name",
+      "role": "protagonist|antagonist|supporting|minor",
+      "description": "character_description",
+      "traits": ["trait_1", "trait_2", "trait_3"]
+    }
+  ],
+  "plotStructure": {
+    "setup": "story_beginning_and_background_introduction",
+    "incitingIncident": "key_event_that_triggers_story",
+    "risingAction": ["main_development_event_1", "main_development_event_2"],
+    "climax": "story_climax",
+    "fallingAction": "development_after_climax",
+    "resolution": "story_ending"
+  },
+  "themes": ["theme_1", "theme_2", "theme_3"],
+  "conflicts": [
+    {
+      "type": "internal|external|interpersonal|societal",
+      "description": "conflict_description"
+    }
+  ],
+  "keyScenes": [
+    {
+      "title": "scene_title",
+      "description": "scene_description",
+      "importance": "scene_importance_in_story"
+    }
+  ]
+}`)
+
+    const dependencies = await createModelDependencies()
+    const configs = { uuid: '' }
+    
+    const analysisSettings = this.settings!.summaryModel ? {
+      ...this.settings!,
+      provider: this.settings!.summaryModel.provider,
+      modelId: this.settings!.summaryModel.model,
+    } : this.settings!
+    
+    const model = getModel(analysisSettings, configs, dependencies)
+    const coreMessages = await convertToCoreMessages([prompt], {
+      modelSupportVision: model.isSupportVision(),
+    })
+
+    const result = await model.chat(coreMessages, {})
+    const responseText = result.contentParts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('')
+    
+    // 解析AI返回的JSON
+    try {
+      const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim()
+      const outline: NovelOutline = JSON.parse(jsonText)
+      return outline
+    } catch (error) {
+      throw new Error(`AI返回的不是有效JSON格式: ${responseText}`)
+    }
   }
 }

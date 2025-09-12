@@ -203,6 +203,7 @@ function Index() {
             sessionId="new"
             model={selectedModel}
             fullWidth
+            showModelSelector={true}
             onSelectModel={(p, m) =>
               setSession((old) => ({
                 ...old,

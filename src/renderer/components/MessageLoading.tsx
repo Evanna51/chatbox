@@ -38,18 +38,6 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
             )}
           </span>
         </LoadingBubble>
-        {status.mode === 'local' && remoteConfig.setting_chatboxai_first && (
-          <Typography variant="body2" sx={{ opacity: 0.5 }} className="pb-1">
-            <Trans
-              i18nKey="Due to local processing limitations, <Link>Chatbox AI Service</Link> is recommended for enhanced document processing capabilities and better results."
-              components={{
-                Link: (
-                  <LinkTargetBlank href="https://chatboxai.app/redirect_app/advanced_file_processing"></LinkTargetBlank>
-                ),
-              }}
-            />
-          </Typography>
-        )}
       </div>
     )
   }
@@ -78,6 +66,21 @@ function MessageStatus(props: { status: NonNullable<Message['status']>[number] }
             />
           </Typography>
         )}
+      </div>
+    )
+  }
+  if (status.type === 'generating_summary') {
+    return (
+      <div>
+          <span className="flex flex-col">
+            <span>{t('Summarizing conversation...')}</span>
+            {status.progress && (
+              <span className="text-[10px] opacity-70 font-normal">
+                {status.progress}
+              </span>
+            )}
+          </span>
+        
       </div>
     )
   }

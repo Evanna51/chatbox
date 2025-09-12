@@ -24,6 +24,56 @@ export interface EventItem {
   tags: string[]
 }
 
+// 对话总结分析结果
+export interface ConversationSummary {
+  mainTopics: string[] // 主要话题
+  keyInformation: string[] // 关键信息点
+  emotionalTone: {
+    overall: 'positive' | 'negative' | 'neutral' | 'mixed'
+    details: string // 情绪详细描述
+  }
+  participantMoods: {
+    user: string // user情绪状态
+    assistant: string // assistant情绪状态
+  }
+  conversationFlow: string // 对话流程总结
+  conclusions: string[] // 对话结论
+}
+
+// 小说大纲分析结果
+export interface NovelOutline {
+  genre: string // 小说类型/题材
+  setting: {
+    time: string // 时间背景
+    place: string // 地点背景
+    worldBuilding: string // 世界观设定
+  }
+  characters: {
+    name: string
+    role: 'protagonist' | 'antagonist' | 'supporting' | 'minor'
+    description: string
+    traits: string[]
+  }[]
+  plotStructure: {
+    setup: string // 开端
+    incitingIncident: string // 起始事件
+    risingAction: string[] // 发展
+    climax: string // 高潮
+    fallingAction: string // 下降
+    resolution: string // 结局
+  }
+  themes: string[] // 主题
+  conflicts: {
+    type: 'internal' | 'external' | 'interpersonal' | 'societal'
+    description: string
+  }[]
+  keyScenes: {
+    title: string
+    description: string
+    importance: string
+  }[]
+}
+
 export interface MemoryCollection {
   sessionId: string
   copilotId: string
@@ -34,6 +84,9 @@ export interface MemoryCollection {
   summary: string
   totalMessages: number
   analyzedMessages: number
+  // 新增的分析结果
+  conversationSummary?: ConversationSummary
+  novelOutline?: NovelOutline
 }
 
 export interface MessageBatch {
@@ -42,6 +95,8 @@ export interface MessageBatch {
   startIndex: number
   endIndex: number
 }
+
+export type AnalysisMode = 'default' | 'conversation_summary' | 'novel_outline'
 
 export interface AnalysisConfig {
   includeSystemMessages: boolean
@@ -53,6 +108,7 @@ export interface AnalysisConfig {
   useAIAnalysis: boolean // 是否使用AI智能分析
   maxBatchTokens: number // 批处理的最大token数量
   estimatedTokensPerChar: number // 每个字符的估计token数（用于粗略计算）
+  analysisMode: AnalysisMode // 分析模式
 }
 
 export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
@@ -65,4 +121,5 @@ export const DEFAULT_ANALYSIS_CONFIG: AnalysisConfig = {
   useAIAnalysis: true,
   maxBatchTokens: 64000, // 默认64K tokens
   estimatedTokensPerChar: 0.75, // 中文大约每个字符0.75个token
+  analysisMode: 'default', // 默认分析模式
 }

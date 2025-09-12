@@ -18,6 +18,7 @@ import type { ModelProvider, ProviderBaseInfo, ProviderModelInfo } from 'src/sha
 import { useProviders } from '@/hooks/useProviders'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import ProviderIcon from './icons/ProviderIcon'
+import { Keyboard } from '@capacitor/keyboard'
 
 export type ModelSelectorProps = PropsWithChildren<
   {
@@ -129,6 +130,16 @@ export const ModelSelector = forwardRef<HTMLDivElement, ModelSelectorProps>(
 
     const isSmallScreen = useIsSmallScreen()
     const [opened, { open, close }] = useDisclosure(false)
+    
+    const handleOpenDrawer = () => {
+      // 在手机上打开模型选择弹窗时收起键盘
+      if (isSmallScreen) {
+        Keyboard.hide().catch(() => {
+          // 忽略键盘隐藏错误，可能在非移动端环境
+        })
+      }
+      open()
+    }
 
     return isSmallScreen ? (
       <>
@@ -136,12 +147,12 @@ export const ModelSelector = forwardRef<HTMLDivElement, ModelSelectorProps>(
           cloneElement(children as ReactElement, {
             onClick: (e: MouseEvent<HTMLButtonElement, MouseEvent>) => {
               children.props?.onClick?.(e)
-              open()
+              handleOpenDrawer()
             },
             ref,
           })
         ) : (
-          <button onClick={open} className="border-none bg-transparent p-0 flex">
+          <button onClick={handleOpenDrawer} className="border-none bg-transparent p-0 flex">
             {children}
           </button>
         )}

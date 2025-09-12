@@ -19,21 +19,21 @@ import {
   Switch,
   CircularProgress,
   Alert,
-  Tabs,
-  Tab,
   Paper,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material'
 import { useTranslation } from 'react-i18next'
-import { Session, CopilotDetail } from '../../shared/types'
+import { Session, CopilotDetail, Message } from '../../shared/types'
 import { useSettings } from '../hooks/useSettings'
 import { 
-  analyzeCharacterSession,
-  analyzeCharacterSessions,
+  analyzeSession,
   exportMemoryCollectionAsJSON,
-  exportMemoryCollectionsAsJSON,
-  getCharacterCopilotSessions,
   MemoryCollection,
   AnalysisConfig,
+  AnalysisMode,
   DEFAULT_ANALYSIS_CONFIG
 } from '../packages/memory-collector'
 
@@ -45,26 +45,6 @@ interface MemoryCollectorProps {
   onClose?: () => void
 }
 
-interface TabPanelProps {
-  children?: React.ReactNode
-  index: number
-  value: number
-}
-
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`memory-tabpanel-${index}`}
-      aria-labelledby={`memory-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
-    </div>
-  )
-}
 
 export function MemoryCollector({ sessions, copilots, currentSession, open: externalOpen, onClose }: MemoryCollectorProps) {
   const { t } = useTranslation()
@@ -74,28 +54,95 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
   // 使用外部控制的open状态，如果没有则使用内部状态
   const open = externalOpen !== undefined ? externalOpen : internalOpen
   const handleClose = onClose || (() => setInternalOpen(false))
-  const [tabValue, setTabValue] = useState(0)
   const [analyzing, setAnalyzing] = useState(false)
-  const [results, setResults] = useState<MemoryCollection[]>([])
-  const [currentResult, setCurrentResult] = useState<MemoryCollection | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<MemoryCollection | null>(null)
   const [config, setConfig] = useState<AnalysisConfig>(DEFAULT_ANALYSIS_CONFIG)
   const [error, setError] = useState<string | null>(null)
+  const [selectedThreadId, setSelectedThreadId] = useState<string>('all_threads')
 
-  // 获取Character类型的会话
-  const characterSessions = getCharacterCopilotSessions(sessions, copilots)
-  const isCurrentSessionCharacter = currentSession ? 
-    characterSessions.some(s => s.id === currentSession.id) : false
+  // 检查当前会话是否可以进行话题分析
+  const isCurrentSessionAvailable = !!currentSession
+  // const canAnalyzeTopics = isCurrentSessionAvailable && currentSession.messages.length > 0
+  
+  // 构建话题选项列表
+  const threadOptions = React.useMemo(() => {
+    if (!currentSession) return []
+    
+    const options = []
+    
+    // 添加"所有话题"选项
+    const totalMessages = (currentSession.messages?.length || 0) + 
+      (currentSession.threads?.reduce((sum, thread) => sum + (thread.messages?.length || 0), 0) || 0)
+    
+    if (totalMessages > 0) {
+      options.push({
+        id: 'all_threads',
+        name: '当前会话所有话题',
+        messageCount: totalMessages
+      })
+    }
+    
+    // 添加当前话题（如果有消息）
+    if (currentSession.messages && currentSession.messages.length > 0) {
+      options.push({
+        id: 'current',
+        name: currentSession.threadName || '当前话题',
+        messageCount: currentSession.messages.length
+      })
+    }
+    
+    // 添加历史话题
+    if (currentSession.threads) {
+      currentSession.threads.forEach(thread => {
+        if (thread.messages && thread.messages.length > 0) {
+          options.push({
+            id: thread.id,
+            name: thread.name,
+            messageCount: thread.messages.length
+          })
+        }
+      })
+    }
+    
+    return options
+  }, [currentSession])
 
-  const handleAnalyzeCurrent = async () => {
-    if (!currentSession || !isCurrentSessionCharacter) return
+  const handleAnalyze = async () => {
+    if (!currentSession || !selectedThreadId) return
 
     setAnalyzing(true)
     setError(null)
 
     try {
-      const result = await analyzeCharacterSession(currentSession, config, settings)
-      setCurrentResult(result)
-      setTabValue(0)
+      let sessionToAnalyze: Session
+      
+      if (selectedThreadId === 'all_threads') {
+        // 分析整个会话（包括所有话题）
+        sessionToAnalyze = currentSession
+      } else if (selectedThreadId === 'current') {
+        // 分析当前话题
+        sessionToAnalyze = {
+          ...currentSession,
+          messages: currentSession.messages,
+          name: `${currentSession.name} - ${currentSession.threadName || '当前话题'}`
+        }
+      } else {
+        // 分析选中的历史话题
+        const selectedThread = currentSession.threads?.find(t => t.id === selectedThreadId)
+        if (!selectedThread || !selectedThread.messages.length) {
+          setError('选中的话题没有消息内容')
+          return
+        }
+        
+        sessionToAnalyze = {
+          ...currentSession,
+          messages: selectedThread.messages,
+          name: `${currentSession.name} - ${selectedThread.name}`
+        }
+      }
+      
+      const result = await analyzeSession(sessionToAnalyze, config, settings)
+      setAnalysisResult(result)
     } catch (err) {
       setError(err instanceof Error ? err.message : '分析失败')
     } finally {
@@ -103,45 +150,23 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
     }
   }
 
-  const handleAnalyzeAll = async () => {
-    setAnalyzing(true)
-    setError(null)
+  const handleExport = () => {
+    if (!analysisResult) return
 
     try {
-      const results = await analyzeCharacterSessions(sessions, copilots, config, settings)
-      setResults(results)
-      setTabValue(1)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '分析失败')
-    } finally {
-      setAnalyzing(false)
+      const content = exportMemoryCollectionAsJSON(analysisResult)
+      const filename = `analysis-${analysisResult.sessionId}-${Date.now()}.json`
+      
+      const blob = new Blob([content], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      setError(error instanceof Error ? error.message : '导出失败')
     }
-  }
-
-  const handleExportCurrent = () => {
-    if (!currentResult) return
-
-    const json = exportMemoryCollectionAsJSON(currentResult)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `memory-${currentResult.sessionId}-${Date.now()}.json`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handleExportAll = () => {
-    if (results.length === 0) return
-
-    const json = exportMemoryCollectionsAsJSON(results)
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `memories-all-${Date.now()}.json`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   const MemoryItem = ({ memory }: { memory: MemoryCollection['memories'][0] }) => (
@@ -200,6 +225,181 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
     </ListItem>
   )
 
+  const ConversationSummaryDisplay = ({ summary }: { summary: MemoryCollection['conversationSummary'] }) => {
+    if (!summary) return null
+    
+    return (
+      <Box>
+        <Typography variant="h6" gutterBottom>对话总结分析</Typography>
+        
+        <Box sx={{ mb: 3 }}>
+
+          <Typography variant="subtitle2" gutterBottom>主要话题</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+            {summary.mainTopics.map((topic, index) => (
+              <Chip key={index} label={topic} color="primary" variant="outlined" />
+            ))}
+          </Box>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>关键信息</Typography>
+          <List dense>
+            {summary.keyInformation.map((info, index) => (
+              <ListItem key={index}>
+                <ListItemText primary={info} />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>情绪分析</Typography>
+          <Card variant="outlined" sx={{ p: 2 }}>
+            <Box sx={{ mb: 2 }}>
+              <Chip 
+                label={`整体情绪: ${summary.emotionalTone.overall}`} 
+                color={
+                  summary.emotionalTone.overall === 'positive' ? 'success' :
+                  summary.emotionalTone.overall === 'negative' ? 'error' :
+                  summary.emotionalTone.overall === 'mixed' ? 'warning' : 'default'
+                }
+                sx={{ mr: 1 }}
+              />
+            </Box>
+            <Typography variant="body2" sx={{ mb: 2 }}>{summary.emotionalTone.details}</Typography>
+            <Box>
+              <Typography variant="caption" color="text.secondary">用户情绪：</Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>{summary.participantMoods.user}</Typography>
+              <Typography variant="caption" color="text.secondary">AI助手情绪：</Typography>
+              <Typography variant="body2">{summary.participantMoods.assistant}</Typography>
+            </Box>
+          </Card>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>对话流程</Typography>
+          <Typography variant="body2">{summary.conversationFlow}</Typography>
+        </Box>
+
+        <Box>
+          <Typography variant="subtitle2" gutterBottom>主要结论</Typography>
+          <List dense>
+            {summary.conclusions.map((conclusion, index) => (
+              <ListItem key={index}>
+                <ListItemText primary={conclusion} />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Box>
+    )
+  }
+
+  const NovelOutlineDisplay = ({ outline }: { outline: MemoryCollection['novelOutline'] }) => {
+    if (!outline) return null
+    
+    return (
+      <Box>
+        <Typography variant="h6" gutterBottom>小说大纲分析</Typography>
+        
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>基本信息</Typography>
+          <Card variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}><strong>类型：</strong>{outline.genre}</Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}><strong>时间背景：</strong>{outline.setting.time}</Typography>
+            <Typography variant="body2" sx={{ mb: 1 }}><strong>地点背景：</strong>{outline.setting.place}</Typography>
+            <Typography variant="body2"><strong>世界观：</strong>{outline.setting.worldBuilding}</Typography>
+          </Card>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>角色设定</Typography>
+          <List dense>
+            {outline.characters.map((character, index) => (
+              <ListItem key={index}>
+                <ListItemText
+                  primary={`${character.name} (${character.role})`}
+                  secondary={
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1 }}>{character.description}</Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                        {character.traits.map((trait, traitIndex) => (
+                          <Chip key={traitIndex} label={trait} size="small" variant="outlined" />
+                        ))}
+                      </Box>
+                    </Box>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>情节结构</Typography>
+          <Card variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="body2" sx={{ mb: 2 }}><strong>开端：</strong>{outline.plotStructure.setup}</Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}><strong>起始事件：</strong>{outline.plotStructure.incitingIncident}</Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}><strong>发展：</strong></Typography>
+            <List dense sx={{ ml: 2 }}>
+              {outline.plotStructure.risingAction.map((action, index) => (
+                <ListItem key={index}>
+                  <ListItemText primary={action} />
+                </ListItem>
+              ))}
+            </List>
+            <Typography variant="body2" sx={{ mb: 2 }}><strong>高潮：</strong>{outline.plotStructure.climax}</Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}><strong>下降：</strong>{outline.plotStructure.fallingAction}</Typography>
+            <Typography variant="body2"><strong>结局：</strong>{outline.plotStructure.resolution}</Typography>
+          </Card>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>主题</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {outline.themes.map((theme, index) => (
+              <Chip key={index} label={theme} color="secondary" variant="outlined" />
+            ))}
+          </Box>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>冲突</Typography>
+          <List dense>
+            {outline.conflicts.map((conflict, index) => (
+              <ListItem key={index}>
+                <ListItemText
+                  primary={`${conflict.type} 冲突`}
+                  secondary={conflict.description}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+
+        <Box>
+          <Typography variant="subtitle2" gutterBottom>关键场景</Typography>
+          <List dense>
+            {outline.keyScenes.map((scene, index) => (
+              <ListItem key={index}>
+                <ListItemText
+                  primary={scene.title}
+                  secondary={
+                    <Box>
+                      <Typography variant="body2" sx={{ mb: 1 }}>{scene.description}</Typography>
+                      <Typography variant="caption" color="text.secondary">重要性：{scene.importance}</Typography>
+                    </Box>
+                  }
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Box>
+      </Box>
+    )
+  }
+
   return (
     <>
       {externalOpen === undefined && (
@@ -210,9 +410,9 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
 
       <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
         <DialogTitle>
-          {t('Character Memory Collector')}
+          {t('Memory Collector')}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            自动收集Character类AI搭档对话中的关键信息，整理为事件和记忆
+            自动收集对话中的关键信息，整理为事件和记忆
           </Typography>
         </DialogTitle>
 
@@ -224,49 +424,60 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
           )}
 
           <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              Character类型会话: {characterSessions.length} 个
-            </Typography>
             
-            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-              <Button
-                variant="contained"
-                onClick={handleAnalyzeCurrent}
-                disabled={!isCurrentSessionCharacter || analyzing}
-              >
-                {analyzing ? <CircularProgress size={20} /> : t('Analyze Current')}
-              </Button>
-              
-              <Button
-                variant="outlined"
-                onClick={handleAnalyzeAll}
-                disabled={characterSessions.length === 0 || analyzing}
-              >
-                {analyzing ? <CircularProgress size={20} /> : t('Analyze All')}
-              </Button>
-            </Box>
+            <div style={{padding: '10px 0'}}></div>
+            {threadOptions.length > 0 && (
+              <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <FormControl size="small" sx={{ minWidth: 250 }}>
+                  <InputLabel>选择分析范围</InputLabel>
+                  <Select
+                    value={selectedThreadId}
+                    label="选择分析范围"
+                    onChange={(e) => setSelectedThreadId(e.target.value)}
+                    disabled={analyzing}
+                  >
+                    {/* <MenuItem value="">
+                      <em>请选择分析范围</em>
+                    </MenuItem> */}
+                    {threadOptions.map(option => (
+                      <MenuItem key={option.id} value={option.id}>
+                        {option.name} ({option.messageCount} 条消息)
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                
+                <Button
+                  variant="contained"
+                  onClick={handleAnalyze}
+                  disabled={!selectedThreadId || analyzing}
+                >
+                  {analyzing ? <CircularProgress size={20} /> : '开始分析'}
+                </Button>
+              </Box>
+            )}
 
             {/* 配置选项 */}
             <Paper sx={{ p: 2, mb: 2 }}>
               <Typography variant="subtitle2" gutterBottom>
                 分析配置
               </Typography>
-              {/* <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={config.useAIAnalysis}
-                      onChange={(e) => setConfig(prev => ({
-                        ...prev,
-                        useAIAnalysis: e.target.checked
-                      }))}
-                    />
-                  }
-                  label="启用AI智能分析"
-                />
-
-              </Box> */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>分析模式</InputLabel>
+                  <Select
+                    value={config.analysisMode}
+                    label="分析模式"
+                    onChange={(e) => setConfig(prev => ({
+                      ...prev,
+                      analysisMode: e.target.value as AnalysisMode
+                    }))}
+                  >
+                    <MenuItem value="default">默认模式</MenuItem>
+                    <MenuItem value="conversation_summary">对话总结</MenuItem>
+                    <MenuItem value="novel_outline">小说大纲</MenuItem>
+                  </Select>
+                </FormControl>
                 <FormControlLabel
                   control={
                     <Switch
@@ -290,6 +501,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                   }))}
                   inputProps={{ min: 0, max: 1, step: 0.1 }}
                   sx={{ width: 120 }}
+                  disabled={config.analysisMode !== 'default'}
                 />
                 <TextField
                   label="批处理最大Tokens"
@@ -305,108 +517,77 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                   disabled={!config.useAIAnalysis}
                 />
               </Box>
-              
-              {/* AI分析模式说明 */}
-              {config.useAIAnalysis && (
-                <Box sx={{ mt: 2, p: 1, bgcolor: 'info.light', borderRadius: 1 }}>
-                  <Typography variant="caption" color="info.contrastText">
-                    💡 AI批量分析模式：使用{settings?.summaryModel ? `${settings.summaryModel.provider} - ${settings.summaryModel.model}` : '默认模型'}进行智能语义分析。
-                    将多条消息拼接至{(config.maxBatchTokens / 1000).toFixed(0)}K tokens后批量处理，大幅提升效率并保持上下文连贯性。
-                  </Typography>
-                </Box>
+              {config.analysisMode === 'conversation_summary' && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  对话总结模式：将分析对话的主要内容、情绪基调和关键信息点
+                </Alert>
+              )}
+              {config.analysisMode === 'novel_outline' && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  小说大纲模式：将提取小说创作相关的角色、情节、设定等元素
+                </Alert>
               )}
             </Paper>
           </Box>
 
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs value={tabValue} onChange={(e, newValue) => setTabValue(newValue)}>
-              <Tab label="当前会话分析" />
-              <Tab label="批量分析结果" />
-            </Tabs>
-          </Box>
-
-          <TabPanel value={tabValue} index={0}>
-            {currentResult ? (
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">
-                      {currentResult.copilotName}
-                    </Typography>
-                    <Button onClick={handleExportCurrent} variant="outlined" size="small">
-                      导出JSON
-                    </Button>
-                  </Box>
-                  
-                  <Typography variant="body2" color="text.secondary" gutterBottom>
-                    {currentResult.summary}
-                  </Typography>
-
-                  <Divider sx={{ my: 2 }} />
-
-                  <Typography variant="subtitle1" gutterBottom>
-                    记忆信息 ({currentResult.memories.length})
-                  </Typography>
-                  <List dense>
-                    {currentResult.memories.map(memory => (
-                      <MemoryItem key={memory.id} memory={memory} />
-                    ))}
-                  </List>
-
-                  <Divider sx={{ my: 2 }} />
-
-                  <Typography variant="subtitle1" gutterBottom>
-                    事件记录 ({currentResult.events.length})
-                  </Typography>
-                  <List dense>
-                    {currentResult.events.map(event => (
-                      <EventItem key={event.id} event={event} />
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
-            ) : (
-              <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                请点击"分析当前会话"开始分析
-              </Typography>
-            )}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={1}>
-            {results.length > 0 ? (
-              <Box>
+          {/* 分析结果显示 */}
+          {analysisResult ? (
+            <Card>
+              <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                   <Typography variant="h6">
-                    分析结果 ({results.length} 个会话)
+                    {analysisResult.copilotName}
                   </Typography>
-                  <Button onClick={handleExportAll} variant="outlined" size="small">
-                    导出全部JSON
+                  <Button onClick={handleExport} variant="outlined" size="small">
+                    导出JSON
                   </Button>
                 </Box>
+                
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  {analysisResult.summary}
+                </Typography>
 
-                {results.map(result => (
-                  <Card key={result.sessionId} sx={{ mb: 2 }}>
-                    <CardContent>
-                      <Typography variant="subtitle1" gutterBottom>
-                        {result.copilotName}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        {result.summary}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Chip label={`${result.memories.length} 条记忆`} size="small" />
-                        <Chip label={`${result.events.length} 个事件`} size="small" />
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            ) : (
-              <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
-                请点击"批量分析"开始分析所有Character类型会话
-              </Typography>
-            )}
-          </TabPanel>
+                <Divider sx={{ my: 2 }} />
+
+                {/* 根据分析模式显示不同内容 */}
+                {config.analysisMode === 'conversation_summary' && analysisResult.conversationSummary && (
+                  <ConversationSummaryDisplay summary={analysisResult.conversationSummary} />
+                )}
+
+                {config.analysisMode === 'novel_outline' && analysisResult.novelOutline && (
+                  <NovelOutlineDisplay outline={analysisResult.novelOutline} />
+                )}
+
+                {config.analysisMode === 'default' && (
+                  <>
+                    <Typography variant="subtitle1" gutterBottom>
+                      记忆信息 ({analysisResult.memories.length})
+                    </Typography>
+                    <List dense>
+                      {analysisResult.memories.map(memory => (
+                        <MemoryItem key={memory.id} memory={memory} />
+                      ))}
+                    </List>
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <Typography variant="subtitle1" gutterBottom>
+                      事件记录 ({analysisResult.events.length})
+                    </Typography>
+                    <List dense>
+                      {analysisResult.events.map(event => (
+                        <EventItem key={event.id} event={event} />
+                      ))}
+                    </List>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Typography color="text.secondary" align="center" sx={{ py: 4 }}>
+              请选择分析范围并开始分析
+            </Typography>
+          )}
         </DialogContent>
 
         <DialogActions>
@@ -415,6 +596,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
           </Button>
         </DialogActions>
       </Dialog>
+
     </>
   )
 }

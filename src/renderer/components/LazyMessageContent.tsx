@@ -1,5 +1,5 @@
 import { Box, Button, Typography } from '@mui/material'
-import React, { memo, useState, useMemo, useCallback } from 'react'
+import React, { memo, useState, useMemo, useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 
@@ -9,6 +9,7 @@ interface LazyMessageContentProps {
   children: React.ReactElement
   maxInitialLength?: number
   chunkSize?: number
+  generating?: boolean // 新增：是否正在生成中
 }
 
 const LazyMessageContent = memo<LazyMessageContentProps>(({
@@ -16,23 +17,74 @@ const LazyMessageContent = memo<LazyMessageContentProps>(({
   isMarkdownEnabled,
   children,
   maxInitialLength = 10000, // 移动端减少初始加载内容
-  chunkSize = 5000
+  chunkSize = 5000,
+  generating = false // 新增：是否正在生成中
 }) => {
   const { t } = useTranslation()
   const isSmallScreen = useIsSmallScreen()
   const [loadedChunks, setLoadedChunks] = useState(1)
-
-  // 根据设备类型调整参数
+  
+  // 根据设备类型调整参数 - 需要先定义，因为后面的useEffect会用到
   const actualMaxInitialLength = useMemo(() => {
     return isSmallScreen ? Math.min(maxInitialLength, 5000) : maxInitialLength
   }, [maxInitialLength, isSmallScreen])
+  
+  // 记录是否曾经处于生成状态，避免生成完成后突然切换渲染模式
+  const [wasGenerating, setWasGenerating] = useState(generating)
+  
+  // 更新生成状态记录
+  useEffect(() => {
+    if (generating) {
+      setWasGenerating(true)
+    } else if (wasGenerating && !generating) {
+      // 生成完成后，延迟重置状态，给用户一些时间适应
+      const timer = setTimeout(() => {
+        // 只有在内容确实很长的情况下才重置，避免不必要的高度变化
+        if (content.length > actualMaxInitialLength * 3) {
+          setWasGenerating(false)
+        }
+      }, 3000) // 3秒后允许切换到懒加载模式（仅对很长的内容）
+      return () => clearTimeout(timer)
+    }
+  }, [generating, wasGenerating, content.length, actualMaxInitialLength])
 
   const actualChunkSize = useMemo(() => {
     return isSmallScreen ? Math.min(chunkSize, 3000) : chunkSize
   }, [chunkSize, isSmallScreen])
 
-  // 如果内容较短，直接渲染
-  if (content.length <= actualMaxInitialLength) {
+  // 检查是否正在生成中 - 优先使用直接传入的generating属性
+  const isGenerating = useMemo(() => {
+    // 优先使用直接传入的generating属性
+    if (generating !== undefined) {
+      return generating
+    }
+    // 备用方案：通过检查children的props来判断是否正在生成
+    if (React.isValidElement(children) && children.props && typeof children.props === 'object') {
+      return (children.props as any).generating === true
+    }
+    return false
+  }, [generating, children])
+
+  // 决定是否应该直接渲染（避免高度突变）
+  const shouldRenderDirectly = useMemo(() => {
+    // 正在生成中，直接渲染
+    if (isGenerating) {
+      return true
+    }
+    // 曾经生成过，继续直接渲染以避免高度跳跃
+    // 只有当内容非常长时才考虑懒加载
+    if (wasGenerating && content.length <= actualMaxInitialLength * 3) {
+      return true
+    }
+    // 内容较短，直接渲染
+    if (content.length <= actualMaxInitialLength) {
+      return true
+    }
+    return false
+  }, [isGenerating, wasGenerating, content.length, actualMaxInitialLength])
+
+  // 如果应该直接渲染，返回完整内容
+  if (shouldRenderDirectly) {
     return children
   }
 
@@ -58,9 +110,9 @@ const LazyMessageContent = memo<LazyMessageContentProps>(({
     if (React.isValidElement(children)) {
       try {
         // 对于简单的情况，直接克隆并替换children
-        if (typeof children.props.children === 'string') {
-          return React.cloneElement(children, {
-            ...children.props,
+        if (typeof (children.props as any).children === 'string') {
+          return React.cloneElement(children as any, {
+            ...(children.props as any),
             children: visibleContent
           })
         }
@@ -68,16 +120,16 @@ const LazyMessageContent = memo<LazyMessageContentProps>(({
         // 对于复杂的嵌套结构，使用更安全的方法
         // 如果children是组件（如Markdown），传递visibleContent作为children
         if (children.type && typeof children.type !== 'string') {
-          return React.cloneElement(children, {
-            ...children.props,
+          return React.cloneElement(children as any, {
+            ...(children.props as any),
             children: visibleContent
           })
         }
         
         // 对于原生DOM元素，只处理简单情况，避免深度递归
         if (typeof children.type === 'string') {
-          return React.cloneElement(children, {
-            ...children.props,
+          return React.cloneElement(children as any, {
+            ...(children.props as any),
             children: visibleContent
           })
         }

@@ -42,7 +42,7 @@ export default class MobileExporter implements Exporter {
       })
 
       // 可选：分享文件
-      await this.shareFile(result.uri, safeFilename)
+      // await this.shareFile(result.uri, safeFilename)
     } catch (error) {
       console.error('移动设备导出Blob失败:', error)
       await Toast.show({
@@ -75,7 +75,7 @@ export default class MobileExporter implements Exporter {
       })
 
       // 分享文件
-      await this.shareFile(result.uri, safeFilename)
+      // await this.shareFile(result.uri, safeFilename)
     } catch (error) {
       console.error('移动设备导出文本文件失败:', error)
       await Toast.show({
@@ -115,7 +115,7 @@ export default class MobileExporter implements Exporter {
       })
 
       // 分享文件
-      await this.shareFile(result.uri, safeFilename)
+      // await this.shareFile(result.uri, safeFilename)
     } catch (error) {
       console.error('移动设备导出图片失败:', error)
       await Toast.show({
@@ -159,11 +159,19 @@ export default class MobileExporter implements Exporter {
     }
   }
 
+  // 文件名如果包含文件格式后缀，则不要影响
   private sanitizeFilename(filename: string): string {
     // 移除或替换不安全的字符
-    return filename
+    const filenameParts = filename.split('.');
+    let safeFilename = filenameParts[0];
+    const ext = filenameParts.pop();
+    safeFilename = safeFilename
       .replace(/[<>:"/\\|?*]/g, '_') // 替换不安全字符为下划线
       .replace(/\s+/g, '_') // 替换空格为下划线
-      .substring(0, 100) // 限制文件名长度
+      .substring(0, 50) // 限制文件名长度
+
+    // formart YYYYMMDDHHMMSS
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').substring(0, 14)
+    return safeFilename+ '_'+ timestamp + '.' + ext
   }
 }

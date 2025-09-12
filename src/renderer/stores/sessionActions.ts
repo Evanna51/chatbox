@@ -11,7 +11,7 @@ import { formatChatAsHtml, formatChatAsMarkdown, formatChatAsTxt, formatChatAsJs
 import * as appleAppStore from '@/packages/apple_app_store'
 import * as localParser from '@/packages/local-parser'
 import { generateImage, generateText, streamText } from '@/packages/model-calls'
-import { shouldTriggerSummary, summarizeMessages, createSummaryContextMessage } from '@/packages/model-calls/summarize'
+import { shouldTriggerSummary, summarizeMessages, createSummaryContextMessage, createSummarySystemMessage, updateSummaryMetadata, resetSummaryMetadata, performIncrementalSummary } from '@/packages/model-calls/summarize'
 import { getModelDisplayName } from '@/packages/model-setting-utils'
 import * as remote from '@/packages/remote'
 import { estimateTokensFromMessages } from '@/packages/token'
@@ -431,6 +431,12 @@ export function insertMessage(sessionId: string, msg: Message) {
   }
   msg.wordCount = countMessageWords(msg)
   msg.tokenCount = estimateTokensFromMessages([msg])
+  
+  // 更新总结元数据（仅对用户和助手消息）
+  if (msg.role === 'user' || msg.role === 'assistant') {
+    updateSummaryMetadata(session, [msg])
+  }
+  
   saveSession({
     ...session,
     messages: [...session.messages, msg],
@@ -839,7 +845,7 @@ export async function generate(
       case undefined: {
         const startTime = Date.now()
         let firstTokenLatency: number | undefined
-        const promptMsgs = await genMessageContext(settings, messages.slice(0, targetMsgIx))
+        const promptMsgs = await genMessageContext(settings, messages.slice(0, targetMsgIx), sessionId)
         const throttledModifyMessage = throttle<onResultChangeWithCancel>((updated) => {
           const text = getMessageText(targetMsg)
           if (!firstTokenLatency && text.length > 0) {
@@ -1112,7 +1118,7 @@ export function clearConversationList(keepNum: number) {
 /**
  * 从历史消息中生成 prompt 上下文
  */
-async function genMessageContext(settings: Settings, msgs: Message[]) {
+async function genMessageContext(settings: Settings, msgs: Message[], sessionId?: string) {
   const {
     // openaiMaxContextTokens,
     maxContextMessageCount,
@@ -1127,56 +1133,132 @@ async function genMessageContext(settings: Settings, msgs: Message[]) {
     throw new Error('maxContextMessageCount is not set')
   }
 
-  // 检查是否需要触发自动总结
-  if (shouldTriggerSummary(msgs, {
+  // 获取会话对象以访问总结元数据
+  const session = sessionId ? getSession(sessionId) : null
+  
+  // 初始化总结元数据（如果不存在）
+  if (session && !session.summaryMetadata) {
+    session.summaryMetadata = {
+      lastSummaryIndex: -1,
+      messagesSinceLastSummary: 0,
+      tokensSinceLastSummary: 0,
+      lastSummaryTimestamp: 0,
+    }
+  }
+  
+  // 检查是否需要触发自动总结 - 延迟执行，避免干扰流式输出
+  if (session?.summaryMetadata && shouldTriggerSummary(session.summaryMetadata, {
     autoSummarize,
     autoSummarizeMessageThreshold,
     autoSummarizeTokenThreshold,
   })) {
-    try {
-      // 创建模型依赖和获取模型实例
-      const dependencies = await createModelDependencies()
-      const configs = { uuid: '' } // 空配置，因为总结功能不需要特定配置
-      
-      // 使用指定的总结模型，如果没有配置则使用当前对话模型
-      const summarySettings = settings.summaryModel ? {
-        ...settings,
-        provider: settings.summaryModel.provider,
-        modelId: settings.summaryModel.model,
-      } : settings
-      
-      const model = getModel(summarySettings, configs, dependencies)
-      
-      // 分离系统消息和历史对话
-      const head = msgs[0].role === 'system' ? msgs[0] : undefined
-      const conversationMsgs = head ? msgs.slice(1) : msgs
-      
-      // 只总结前面的消息，保留最近的几条消息不被总结
-      const keepRecentCount = Math.min(3, Math.floor(conversationMsgs.length / 2))
-      const messagesToSummarize = conversationMsgs.slice(0, -keepRecentCount)
-      const recentMessages = conversationMsgs.slice(-keepRecentCount)
-      
-      if (messagesToSummarize.length > 0) {
-        console.log(`Auto-summarizing ${messagesToSummarize.length} messages, keeping ${recentMessages.length} recent messages`)
+    // 延迟执行总结，等待当前消息生成完成后再开始
+    setTimeout(async () => {
+      try {
+        // 创建模型依赖和获取模型实例
+        const dependencies = await createModelDependencies()
+        const configs = { uuid: '' } // 空配置，因为总结功能不需要特定配置
         
-        // 生成总结
-        const summaryData = await summarizeMessages(model, messagesToSummarize)
-        const summaryMessage = createSummaryContextMessage(summaryData)
+        // 使用指定的总结模型，如果没有配置则使用当前对话模型
+        const summarySettings = settings.summaryModel ? {
+          ...settings,
+          provider: settings.summaryModel.provider,
+          modelId: settings.summaryModel.model,
+        } : settings
         
-        // 构建新的消息列表：系统消息 + 总结消息 + 最近的消息
-        const newMsgs = [
-          ...(head ? [head] : []),
-          summaryMessage,
-          ...recentMessages,
-        ]
+        const model = getModel(summarySettings, configs, dependencies)
         
-        console.log(`Context optimized: ${msgs.length} messages -> ${newMsgs.length} messages (including summary)`)
-        msgs = newMsgs
+        // 重新获取最新的session状态
+        const currentSession = getSession(sessionId!)
+        if (!currentSession) return
+        
+        // 分离系统消息和历史对话
+        const currentMsgs = currentSession.messages
+        const head = currentMsgs[0]?.role === 'system' ? currentMsgs[0] : undefined
+        const conversationMsgs = head ? currentMsgs.slice(1) : currentMsgs
+        
+        // 计算需要总结的消息范围
+        const lastSummaryIndex = currentSession.summaryMetadata?.lastSummaryIndex ?? -1
+        const startIndex = lastSummaryIndex + 1
+        
+        // 保留最近的消息不被总结（基于上下文限制）
+        const keepRecentCount = Math.min(maxContextMessageCount / 2, 5)
+        const endIndex = Math.max(startIndex, conversationMsgs.length - keepRecentCount)
+        
+        const messagesToSummarize = conversationMsgs.slice(startIndex, endIndex)
+        
+        if (messagesToSummarize.length > 0) {
+          console.log(`Delayed summarization: ${messagesToSummarize.length} messages (from index ${startIndex} to ${endIndex})`)
+          
+          // 创建总结状态消息
+          let tempSummaryMsg: Message | null = null
+          if (sessionId) {
+            tempSummaryMsg = createMessage('system', '')
+            tempSummaryMsg.status = [{
+              type: 'generating_summary',
+              progress: '正在分析对话内容...'
+            }]
+            insertMessage(sessionId, tempSummaryMsg)
+          }
+          
+          try {
+            // 查找之前的总结内容
+            let previousSummary: string | null = null
+            const existingSummaryMsg = conversationMsgs.find(msg => 
+              msg.role === 'system' && getMessageText(msg).includes('[对话历史总结]')
+            )
+            if (existingSummaryMsg) {
+              const summaryText = getMessageText(existingSummaryMsg)
+              const summaryMatch = summaryText.match(/主要内容：\n([\s\S]*?)\n\n关键要点：/)
+              previousSummary = summaryMatch ? summaryMatch[1] : null
+            }
+            
+            // 执行增量总结 - 简化进度回调，减少UI更新
+            const summaryData = await performIncrementalSummary(model, previousSummary, messagesToSummarize, (progress) => {
+              // 只在重要阶段更新进度，减少干扰
+              if (tempSummaryMsg && sessionId && (
+                progress.includes('完成') || 
+                progress.includes('处理') || 
+                progress.includes('分析')
+              )) {
+                tempSummaryMsg.status = [{
+                  type: 'generating_summary',
+                  progress
+                }]
+                modifyMessage(sessionId, tempSummaryMsg)
+              }
+            })
+            
+            // 完成总结后，移除临时状态消息并添加总结系统消息
+            if (sessionId && tempSummaryMsg) {
+              removeMessage(sessionId, tempSummaryMsg.id)
+              const summarySystemMsg = createSummarySystemMessage(summaryData)
+              insertMessage(sessionId, summarySystemMsg)
+              
+              // 重置总结元数据
+              const updatedSession = getSession(sessionId)
+              if (updatedSession) {
+                resetSummaryMetadata(updatedSession, endIndex - 1)
+                saveSession(updatedSession)
+              }
+            }
+            
+            console.log(`Delayed summarization completed: ${messagesToSummarize.length} messages summarized`)
+          } catch (error) {
+            // 如果总结失败，移除临时状态消息
+            if (sessionId && tempSummaryMsg) {
+              removeMessage(sessionId, tempSummaryMsg.id)
+            }
+            console.error('Delayed summarization failed:', error)
+          }
+        }
+      } catch (error) {
+        console.error('Auto-summarization failed:', error)
       }
-    } catch (error) {
-      console.error('Auto-summarization failed, using original messages:', error)
-      // 如果总结失败，继续使用原始消息列表
-    }
+    }, 3000) // 延迟3秒执行，确保流式输出有足够时间完成
+    
+    // 对于当前的消息生成，使用原始消息列表，不等待总结完成
+    console.log('Using original messages for current generation, summarization will run after delay')
   }
 
   const head = msgs[0].role === 'system' ? msgs[0] : undefined

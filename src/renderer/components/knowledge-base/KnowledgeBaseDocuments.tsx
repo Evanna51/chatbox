@@ -134,9 +134,11 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ knowled
 
     return {
       name: file.name,
-      path: file.path,
+      path: file.path || file.name, // 移动端可能没有 path，使用 name 作为备选
       type: mimeType,
       size: file.size,
+      // 在移动端环境下保存原始 File 对象引用
+      _file: platform.type === 'mobile' ? file : undefined,
     }
   }, [])
 

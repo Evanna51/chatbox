@@ -6,7 +6,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { useEffect } from 'react'
 import { createMessage, type ModelProvider } from 'src/shared/types'
-import Header from '@/components/Header'
+import Header, { type HeaderProps } from '@/components/Header'
 import InputBox from '@/components/InputBox'
 import MessageList from '@/components/MessageList'
 import ThreadHistoryDrawer from '@/components/ThreadHistoryDrawer'
@@ -56,16 +56,7 @@ function RouteComponent() {
 
   return currentSession ? (
     <div className="flex flex-col h-full">
-      <Header />
-
-      {/* MessageList 设置 key，确保每个 session 对应新的 MessageList 实例 */}
-      <MessageList key={`message-list${currentSessionId}`} currentSession={currentSession} />
-
-      <ScrollButtons />
-      <InputBox
-        key={`input-box${currentSession.id}`}
-        sessionId={currentSession.id}
-        sessionType={currentSession.type}
+      <Header 
         model={
           currentSession.settings?.provider && currentSession.settings?.modelId
             ? {
@@ -74,14 +65,6 @@ function RouteComponent() {
               }
             : undefined
         }
-        onStartNewThread={() => {
-          sessionActions.startNewThread()
-          return true
-        }}
-        onRollbackThread={() => {
-          sessionActions.removeCurrentThread(currentSessionId)
-          return true
-        }}
         onSelectModel={(provider: ModelProvider, modelId: string) => {
           if (!currentSession) {
             return
@@ -94,6 +77,24 @@ function RouteComponent() {
               modelId,
             },
           })
+        }}
+      />
+
+      {/* MessageList 设置 key，确保每个 session 对应新的 MessageList 实例 */}
+      <MessageList key={`message-list${currentSessionId}`} currentSession={currentSession} />
+
+      <ScrollButtons />
+      <InputBox
+        key={`input-box${currentSession.id}`}
+        sessionId={currentSession.id}
+        sessionType={currentSession.type}
+        onStartNewThread={() => {
+          sessionActions.startNewThread()
+          return true
+        }}
+        onRollbackThread={() => {
+          sessionActions.removeCurrentThread(currentSessionId)
+          return true
         }}
         onClickSessionSettings={() => {
           if (!currentSession) {

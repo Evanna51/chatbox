@@ -68,6 +68,7 @@ export type InputBoxProps = {
     modelId: string
   }
   fullWidth?: boolean
+  showModelSelector?: boolean // 新增：控制是否显示model选择器
   onSelectModel?(provider: string, model: string): void
   onSubmit?(payload: InputBoxPayload): Promise<void>
   onStopGenerating?(): boolean
@@ -84,6 +85,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
       generating = false,
       model,
       fullWidth = false,
+      showModelSelector = false,
       onSelectModel,
       onSubmit,
       onStopGenerating,
@@ -141,19 +143,19 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     )
 
     const { providers } = useProviders()
+    
+    // Model display logic for InputBox (only when showModelSelector is true)
     const modelSelectorDisplayText = useMemo(() => {
-      if (!model) {
+      if (!showModelSelector || !model) {
         return t('Select Model')
       }
       const providerInfo = providers.find((p) => p.id === model.provider)
-
       const modelInfo = (providerInfo?.models || providerInfo?.defaultSettings?.models)?.find(
         (m) => m.modelId === model.modelId
       )
       return `${modelInfo?.nickname || model.modelId}`
-    }, [providers, model, t])
+    }, [providers, model, t, showModelSelector])
 
-    // 小屏幕上显示简短的模型名称（只保留最后一个/后的内容）
     const shortModelDisplayText = useMemo(() => {
       if (!modelSelectorDisplayText || modelSelectorDisplayText === t('Select Model')) {
         return modelSelectorDisplayText
@@ -210,11 +212,11 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
         return
       }
 
-      // 未选择模型时 显示error tip
-      if (!model) {
-        // 如果不延时执行，会导致error tip 立即消失
-        await delay(100)
-        setShowSelectModelErrorTip(true)
+      // Check if model is selected - trigger error in Header if not
+      const currentSession = sessionId ? await import('@/stores/sessionStorageMutations').then(m => m.getSessionAsync(sessionId)) : null
+      if (currentSession && !currentSession.settings?.provider) {
+        // Dispatch event to trigger model selection error in Header
+        window.dispatchEvent(new CustomEvent('model-validation-needed'))
         return
       }
 
@@ -666,7 +668,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                 <>
                   <Menu shadow="md" position="top-start">
                     <Menu.Target>
-                      <ActionIcon
+                      <div><ActionIcon
                         variant="transparent"
                         w={20}
                         h={20}
@@ -676,7 +678,10 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                         color="chatbox-secondary"
                       >
                         <IconCirclePlus strokeWidth={1.8} />
+                        
                       </ActionIcon>
+                      文件
+                      </div>
                     </Menu.Target>
 
                     <Menu.Dropdown>
@@ -705,7 +710,9 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                       setWebBrowsingMode(!webBrowsingMode)
                       dom.focusMessageInput()
                     }}
+                    title={t('Web Browsing')}
                   >
+                    
                     <IconWorld strokeWidth={1.8} />
                   </ActionIcon>
 
@@ -743,45 +750,47 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             </Flex>
 
             <Flex gap={isSmallScreen ? 'xxs' : 'sm'} align="flex-end" justify="flex-end">
-              <Tooltip
-                label={t('Please select a model')}
-                color="chatbox-error"
-                opened={showSelectModelErrorTip}
-                withArrow
-              >
-                {sessionType === 'picture' ? (
-                  <ImageModelSelect onSelect={onSelectModel}>
-                    <span className="flex items-center text-sm opacity-70 cursor-pointer bg-transparent hover:bg-slate-400/25 h-6">
-                      {providers.find((p) => p.id === model?.provider)?.name || model?.provider || t('Select Model')}
-                      <IconSelector size={16} className="opacity-50" />
-                    </span>
-                  </ImageModelSelect>
-                ) : (
-                  <ModelSelector onSelect={onSelectModel}>
-                    <Flex
-                      gap="xxs"
-                      px={isSmallScreen ? 0 : 'xs'}
-                      align="center"
-                      justify={isSmallScreen ? "flex-end" : "flex-start"}
-                      className={cn('cursor-pointer hover:bg-slate-400/25 rounded-lg', !isSmallScreen && 'py-1')}
-                    >
-                      {!!model && <ProviderImageIcon size={isSmallScreen ? 16 : 24} provider={model.provider} />}
-                      <Text size={isSmallScreen ? 'xs' : 'sm'} className="line-clamp-1">
-                        {isSmallScreen ? shortModelDisplayText : modelSelectorDisplayText}
-                      </Text>
-                      <IconSelector
-                        size={isSmallScreen ? 16 : 20}
-                        className="flex-[0_0_auto] text-[var(--mantine-color-chatbox-tertiary-text)]"
-                      />
-                    </Flex>
-                  </ModelSelector>
-                )}
-              </Tooltip>
+              {showModelSelector && (
+                <Tooltip
+                  label={t('Please select a model')}
+                  color="chatbox-error"
+                  opened={showSelectModelErrorTip}
+                  withArrow
+                >
+                  {sessionType === 'picture' ? (
+                    <ImageModelSelect onSelect={onSelectModel}>
+                      <span className="flex items-center text-sm opacity-70 cursor-pointer bg-transparent hover:bg-slate-400/25 h-6">
+                        {providers.find((p) => p.id === model?.provider)?.name || model?.provider || t('Select Model')}
+                        <IconSelector size={16} className="opacity-50" />
+                      </span>
+                    </ImageModelSelect>
+                  ) : (
+                    <ModelSelector onSelect={onSelectModel}>
+                      <Flex
+                        gap="xxs"
+                        px={isSmallScreen ? 0 : 'xs'}
+                        align="center"
+                        justify={isSmallScreen ? "flex-end" : "flex-start"}
+                        className={cn('cursor-pointer hover:bg-slate-400/25 rounded-lg', !isSmallScreen && 'py-1')}
+                      >
+                        {!!model && <ProviderImageIcon size={isSmallScreen ? 16 : 24} provider={model.provider} />}
+                        <Text size={isSmallScreen ? 'xs' : 'sm'} className="line-clamp-1">
+                          {isSmallScreen ? shortModelDisplayText : modelSelectorDisplayText}
+                        </Text>
+                        <IconSelector
+                          size={isSmallScreen ? 16 : 20}
+                          className="flex-[0_0_auto] text-[var(--mantine-color-chatbox-tertiary-text)]"
+                        />
+                      </Flex>
+                    </ModelSelector>
+                  )}
+                </Tooltip>
+              )}
 
               <ActionIcon
                 disabled={disableSubmit && !generating}
                 radius={18}
-                size={isSmallScreen ? 28 : 36}
+                size={isSmallScreen ? 24 : 36}
                 onClick={generating ? onStopGenerating : () => handleSubmit()}
                 className={cn(
                   // 'mt-[-6px] mb-[2px]',
@@ -790,7 +799,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     '!text-white !bg-[var(--mantine-color-chatbox-background-tertiary-text)]'
                 )}
               >
-                {generating ? <IconPlayerStopFilled size={20} /> : <IconArrowUp size={20} />}
+                {generating ? <IconPlayerStopFilled size={20} /> : <IconArrowUp size={16} />}
               </ActionIcon>
             </Flex>
           </Flex>

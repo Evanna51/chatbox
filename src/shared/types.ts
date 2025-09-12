@@ -125,6 +125,10 @@ export interface Message {
         type: 'loading_webpage'
         mode?: 'local' | 'advanced'
       }
+    | {
+        type: 'generating_summary'
+        progress?: string
+      }
   )[]
 
   wordCount?: number // 当前消息的字数
@@ -214,6 +218,12 @@ export interface Session {
       createdAt: number
     }
   > // 消息 ID 对应的分叉数据
+  summaryMetadata?: {
+    lastSummaryIndex: number // 最后一次总结时的消息索引
+    messagesSinceLastSummary: number // 自上次总结以来的新消息数量
+    tokensSinceLastSummary: number // 自上次总结以来的新token数量
+    lastSummaryTimestamp: number // 最后一次总结的时间戳
+  } // 总结元数据
 }
 
 export type SessionMeta = Pick<Session, 'id' | 'name' | 'starred' | 'assistantAvatarKey' | 'picUrl' | 'type'>
@@ -653,4 +663,6 @@ export type FileMeta = {
   path: string
   type: string
   size: number
+  // 移动端专用：保存原始 File 对象的引用
+  _file?: File
 }

@@ -14,7 +14,7 @@ export function settings(): Settings {
     // Provider settings with default API keys
     providers: {
       [ModelProviderEnum.DeepSeek]: {
-        apiKey: 'sk-df194b55420b4989a564afa9dd1ecf9d',
+        
       },
     },
 
@@ -184,8 +184,8 @@ export function chatSessionSettings(): SessionSettings {
     modelId: 'deepseek-chat',
     maxContextMessageCount: 6,
     autoSummarize: false, // 默认关闭自动总结
-    autoSummarizeMessageThreshold: 20, // 超过20条消息时触发
-    autoSummarizeTokenThreshold: 32*1024, // 超过32k tokens时触发
+    autoSummarizeMessageThreshold: 16, // 超过20条消息时触发
+    autoSummarizeTokenThreshold: 6*1024, // 超过6k tokens时触发
   }
 }
 
@@ -328,63 +328,48 @@ export const SystemProviders: ProviderBaseInfo[] = [
   //     ],
   //   },
   // },
-  // {
-  //   id: ModelProviderEnum.Gemini,
-  //   name: 'Gemini',
-  //   type: ModelProviderType.Gemini,
-  //   urls: {
-  //     website: 'https://gemini.google.com/',
-  //   },
-  //   defaultSettings: {
-  //     apiHost: 'https://generativelanguage.googleapis.com',
-  //     // https://ai.google.dev/models/gemini
-  //     models: [
-  //       {
-  //         modelId: 'gemini-2.5-flash-preview-05-20',
-  //         capabilities: ['vision', 'reasoning'],
-  //       },
-  //       {
-  //         modelId: 'gemini-2.5-pro-preview-06-05',
-  //         capabilities: ['vision', 'reasoning'],
-  //       },
-  //       {
-  //         modelId: 'gemini-2.0-flash-exp',
-  //         capabilities: ['vision'],
-  //       },
-  //       {
-  //         modelId: 'gemini-2.0-flash-thinking-exp',
-  //         capabilities: ['vision', 'reasoning'],
-  //       },
-  //       {
-  //         modelId: 'gemini-2.0-flash-thinking-exp-1219',
-  //         capabilities: ['vision', 'reasoning'],
-  //       },
-  //       {
-  //         modelId: 'gemini-1.5-pro-latest',
-  //         capabilities: ['vision'],
-  //       },
-  //       {
-  //         modelId: 'gemini-1.5-flash-latest',
-  //         capabilities: ['vision'],
-  //       },
-  //       {
-  //         modelId: 'gemini-1.5-pro-exp-0827',
-  //         capabilities: ['vision'],
-  //       },
-  //       {
-  //         modelId: 'gemini-1.5-flash-exp-0827',
-  //         capabilities: ['vision'],
-  //       },
-  //       {
-  //         modelId: 'gemini-1.5-flash-8b-exp-0924',
-  //         capabilities: ['vision'],
-  //       },
-  //       {
-  //         modelId: 'gemini-pro',
-  //       },
-  //     ],
-  //   },
-  // },
+  {
+    id: ModelProviderEnum.Gemini,
+    name: 'Gemini',
+    type: ModelProviderType.Gemini,
+    urls: {
+      website: 'https://gemini.google.com/',
+    },
+    defaultSettings: {
+      apiHost: 'https://generativelanguage.googleapis.com',
+      // https://ai.google.dev/models/gemini
+      // 优化后的模型列表，移除了重复和非免费的实验性模型
+      models: [
+        {
+          nickname: 'Gemini2-Thinking',
+          modelId: 'gemini-2.0-flash-thinking-exp',
+          capabilities: ['vision', 'reasoning'],
+        },    
+        {
+          nickname: 'Gemini2',
+          modelId: 'gemini-2.0-flash',
+          capabilities: ['vision'],
+          contextWindow: 1_048_576, // 1M tokens
+        },
+        {
+          nickname: 'Gemini1.5-Pro',
+          modelId: 'gemini-1.5-pro-latest',
+          capabilities: ['vision'],
+          contextWindow: 2_097_152, // 2M tokens
+        },
+        {
+          nickname: 'Gemini1.5-Flash',
+          modelId: 'gemini-1.5-flash-latest',
+          capabilities: ['vision'],
+          contextWindow: 1_048_576, // 1M tokens
+        },
+        {
+          modelId: 'gemini-pro',
+          contextWindow: 32_768, // 32K tokens
+        },
+      ],
+    },
+  },
   // {
   //   id: ModelProviderEnum.Ollama,
   //   name: 'Ollama',
@@ -406,18 +391,20 @@ export const SystemProviders: ProviderBaseInfo[] = [
     name: 'DeepSeek',
     type: ModelProviderType.OpenAI,
     defaultSettings: {
-      apiKey: 'sk-df194b55420b4989a564afa9dd1ecf9d',
+      apiKey: '',
       models: [
         {
+          nickname: 'ds-v3.1',
           modelId: 'deepseek-chat',
           contextWindow: 64_000,
           capabilities: ['tool_use'],
         },
+        // {
+        //   modelId: 'deepseek-coder',
+        //   contextWindow: 64_000,
+        // },
         {
-          modelId: 'deepseek-coder',
-          contextWindow: 64_000,
-        },
-        {
+          nickname: 'ds-v3.1-reasoner',
           modelId: 'deepseek-reasoner',
           contextWindow: 64_000,
           capabilities: ['reasoning', 'tool_use'],
@@ -433,11 +420,13 @@ export const SystemProviders: ProviderBaseInfo[] = [
       apiHost: 'https://api.siliconflow.cn',
       models: [
         {
+          nickname: 'ds-v3',
           modelId: 'deepseek-ai/DeepSeek-V3',
           capabilities: ['tool_use'],
           contextWindow: 64_000,
         },
         {
+          nickname: 'ds-r1',
           modelId: 'deepseek-ai/DeepSeek-R1',
           capabilities: ['reasoning', 'tool_use'],
           contextWindow: 64_000,

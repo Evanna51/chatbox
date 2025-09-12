@@ -8,6 +8,8 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import PersonIcon from '@mui/icons-material/Person'
 import ReplayIcon from '@mui/icons-material/Replay'
 import ReportIcon from '@mui/icons-material/Report'
+import DeleteIcon from '@mui/icons-material/Delete'
+
 import SettingsIcon from '@mui/icons-material/Settings'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import SouthIcon from '@mui/icons-material/South'
@@ -493,7 +495,8 @@ const _Message: FC<Props> = (props) => {
               <div
                 className={cn(
                   'max-w-full inline-block',
-                  msg.role !== 'assistant' ? 'bg-wechat-green/30 px-4 rounded-lg' : 'w-full'
+                  msg.role !== 'assistant' && msg.role !== 'system' ? 'bg-wechat-green/30 px-4 rounded-lg' : 'w-full',
+                  msg.role === 'system' ? 'text-gray-500' : ''
                 )}
                 style={{ textAlign: 'left', borderTopRightRadius: msg.role === 'user' ? '0px' : '10px' }}
               >
@@ -528,6 +531,7 @@ const _Message: FC<Props> = (props) => {
                               isMarkdownEnabled={enableMarkdownRendering}
                               maxInitialLength={platform.type === 'mobile' ? 5000 : 10000}
                               chunkSize={platform.type === 'mobile' ? 3000 : 5000}
+                              generating={msg.generating}
                             >
                               {platform.type === 'mobile' ? (
                                 <OptimizedMarkdown
@@ -562,6 +566,7 @@ const _Message: FC<Props> = (props) => {
                               isMarkdownEnabled={false}
                               maxInitialLength={platform.type === 'mobile' ? 5000 : 10000}
                               chunkSize={platform.type === 'mobile' ? 3000 : 5000}
+                              generating={msg.generating}
                             >
                               <div style={{ whiteSpace: 'pre-line' }}>
                                 {needCollapse && isCollapsed ? `${item.text.slice(0, collapseThreshold)}...` : item.text}
@@ -736,6 +741,7 @@ const _Message: FC<Props> = (props) => {
                           </Tooltip>
                         )
                     }
+                   
                     {!(props.sessionType === 'picture' && msg.role === 'assistant') && (
                       <Tooltip title={t('copy')} placement="top">
                         <IconButton
@@ -755,9 +761,13 @@ const _Message: FC<Props> = (props) => {
                         </IconButton>
                       </Tooltip>
                     )}
+                     <IconButton onClick={onDelMsg} color="secondary">
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                     <IconButton onClick={handleClick} color={props.sessionType === 'picture' ? 'secondary' : 'primary'}>
                       <MoreVertIcon fontSize="small" />
                     </IconButton>
+                    
                     <StyledMenu
                       MenuListProps={{
                         'aria-labelledby': 'demo-customized-button',

@@ -46,6 +46,11 @@ const OptimizedMarkdown = memo<OptimizedMarkdownProps>(({
   useEffect(() => {
     const contentLength = children.length
     
+    // 如果正在生成中，保持当前渲染模式不变以避免闪烁
+    if (generating) {
+      return
+    }
+    
     // 更保守的长度检查，防止错误
     if (contentLength > maxRenderLength) {
       setShouldOptimize(true)
@@ -54,7 +59,7 @@ const OptimizedMarkdown = memo<OptimizedMarkdownProps>(({
       setShouldOptimize(false)
       setRenderMode('full')
     }
-  }, [children.length, maxRenderLength])
+  }, [children.length, maxRenderLength, generating])
 
   // 简化版本的插件配置（性能优先）
   const simplifiedPlugins = useMemo(() => ({
@@ -128,6 +133,11 @@ const OptimizedMarkdown = memo<OptimizedMarkdownProps>(({
   })
 
   const processedContent = useMemo(() => {
+    // 如果正在生成中，不要截断内容以保证流式显示
+    if (generating) {
+      return children
+    }
+    
     // 安全检查：如果内容过长，强制截断以防止错误
     const safeMaxLength = renderMode === 'simplified' ? maxRenderLength : maxRenderLength * 2
     let content = children
@@ -143,7 +153,7 @@ const OptimizedMarkdown = memo<OptimizedMarkdownProps>(({
     }
     // 完整模式：保留所有处理
     return enableLaTeXRendering ? content : content // TODO: 添加 LaTeX 处理
-  }, [children, enableLaTeXRendering, renderMode, maxRenderLength])
+  }, [children, enableLaTeXRendering, renderMode, maxRenderLength, generating])
 
   return (
     <div className={`optimized-markdown ${className || ''}`}>

@@ -40,9 +40,9 @@ export function useSidebarWidth() {
   } else if (md) {
     return 220
   } else if (sm) {
-    return 200
+    return 300
   } else {
-    return 240
+    return 320
   }
 }
 
