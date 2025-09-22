@@ -19,25 +19,13 @@ export function settings(): Settings {
       },
     },
 
-    // Default chat model
-    defaultChatModel: {
-      provider: ModelProviderEnum.DeepSeek,
-      model: 'deepseek-chat',
-    },
+    // Default chat model - 暂时设为 undefined，让用户自己选择
+    defaultChatModel: undefined,
 
-    // Default models for various tasks
-    threadNamingModel: {
-      provider: ModelProviderEnum.DeepSeek,
-      model: 'deepseek-chat',
-    },
-    searchTermConstructionModel: {
-      provider: ModelProviderEnum.DeepSeek,
-      model: 'deepseek-chat',
-    },
-    summaryModel: {
-      provider: ModelProviderEnum.DeepSeek,
-      model: 'deepseek-chat',
-    },
+    // Default models for various tasks - 暂时设为 undefined，避免 API Key 问题
+    threadNamingModel: undefined,
+    searchTermConstructionModel: undefined,
+    summaryModel: undefined,
 
     // aiProvider: ModelProviderEnum.OpenAI,
     // openaiKey: '',
@@ -182,8 +170,9 @@ export function getDefaultPrompt() {
 
 export function chatSessionSettings(): SessionSettings {
   return {
-    provider: ModelProviderEnum.DeepSeek,
-    modelId: 'deepseek-chat',
+    // 暂时不设置默认提供商，让用户在首次使用时选择
+    provider: undefined as any, // 临时类型断言，避免类型错误
+    modelId: undefined as any,
     maxContextMessageCount: 6,
     autoSummarize: false, // 默认关闭自动总结
     autoSummarizeMessageThreshold: 16, // 超过20条消息时触发
@@ -193,8 +182,9 @@ export function chatSessionSettings(): SessionSettings {
 
 export function pictureSessionSettings(): SessionSettings {
   return {
-    provider: ModelProviderEnum.DeepSeek,
-    modelId: 'deepseek-chat',
+    // 暂时不设置默认提供商，让用户在首次使用时选择
+    provider: undefined as any,
+    modelId: undefined as any,
     imageGenerateNum: 3,
     dalleStyle: 'vivid',
   }

@@ -12,16 +12,103 @@ let generateText: any = null
 
 export default class MobileKnowledgeBaseController implements KnowledgeBaseController {
   private db: SQLiteDBConnection | null = null
+  private sqlite: SQLiteConnection | null = null
   private storage: LocalForage
   private isInitialized = false
+  private _initPromise: Promise<void> | null = null
 
   constructor() {
-    this.storage = localforage.createInstance({ name: 'kb-documents' })
+    try {
+      this.storage = localforage.createInstance({ name: 'kb-documents' })
+    } catch (error) {
+      console.error('[Mobile KB] Failed to create LocalForage instance:', error)
+      throw new Error(`LocalForage initialization failed: ${error}`)
+    }
+    
+    // 预热 SQLite 插件（异步，不阻塞构造函数）
+    this.warmupSQLitePlugin().catch(error => {
+      console.warn('[Mobile KB] SQLite plugin warmup failed:', error)
+    })
+  }
+
+  /**
+   * 预热 SQLite 插件，避免首次使用时的初始化问题
+   */
+  private async warmupSQLitePlugin(): Promise<void> {
+    try {
+      // 延迟执行，让应用完全启动
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      if (typeof window !== 'undefined' && 'Capacitor' in window) {
+        const { Capacitor } = await import('@capacitor/core')
+        
+        if (Capacitor.isNativePlatform() && CapacitorSQLite) {
+          console.log('[Mobile KB] Warming up SQLite plugin...')
+          
+          // 执行简单的 echo 测试
+          try {
+            await CapacitorSQLite.echo({ value: 'warmup' })
+            console.log('[Mobile KB] SQLite plugin warmup successful')
+          } catch (error) {
+            console.warn('[Mobile KB] SQLite plugin warmup echo failed:', error)
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[Mobile KB] SQLite plugin warmup error:', error)
+    }
+  }
+
+  /**
+   * 安全的数据库操作包装器
+   */
+  private async safeDbOperation<T>(operation: () => Promise<T>, operationName: string): Promise<T> {
+    if (!this.db) {
+      console.error(`[Mobile KB] Database is null in ${operationName}`)
+      throw new Error(`Database not initialized for operation: ${operationName}`)
+    }
+    
+    try {
+      return await operation()
+    } catch (error) {
+      console.error(`[Mobile KB] Error in ${operationName}:`, error)
+      
+      // 如果是连接错误，重置数据库状态
+      if (error instanceof Error && (
+        error.message.includes('database is closed') ||
+        error.message.includes('connection') ||
+        error.message.includes('SQLITE_MISUSE')
+      )) {
+        console.warn(`[Mobile KB] Database connection issue detected, resetting state`)
+        this.db = null
+        this.isInitialized = false
+        this._initPromise = null
+      }
+      
+      throw new Error(`${operationName} failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   private async ensureInitialized() {
     if (this.isInitialized) return
 
+    try {
+      // 添加初始化锁，防止并发初始化
+      if (this._initPromise) {
+        await this._initPromise
+        return
+      }
+
+      this._initPromise = this._doInitialize()
+      await this._initPromise
+    } catch (error) {
+      console.error('[Mobile KB] Initialization failed:', error)
+      this._initPromise = null
+      throw error
+    }
+  }
+
+  private async _doInitialize() {
     try {
       // 检查并请求权限
       await this.checkAndRequestPermissions()
@@ -30,13 +117,12 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
       await this.initSQLite()
       
       this.isInitialized = true
-      console.log('[Mobile KB] Database initialized successfully')
+      console.log('[Mobile KB] Database initialized successfully with SQLite')
     } catch (error) {
-      console.error('[Mobile KB] Failed to initialize database:', error)
+      console.error('[Mobile KB] Failed to initialize SQLite database:', error)
       
-      // 如果SQLite初始化失败，尝试使用纯LocalForage方案
-      console.warn('[Mobile KB] Falling back to LocalForage-only storage')
-      await this.initFallbackStorage()
+      // 如果SQLite初始化失败，抛出错误而不是回退到LocalForage
+      throw new Error(`SQLite initialization failed: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
@@ -44,30 +130,138 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
    * 延迟初始化 SQLite 连接
    */
   private async initSQLite() {
-    try {
-      // 创建 SQLite 连接
-      const sqlite = new SQLiteConnection(CapacitorSQLite)
-      
-      // 检查SQLite是否可用
-      const isAvailable = await CapacitorSQLite.isSecretStored()
-      console.log('[Mobile KB] SQLite availability check:', isAvailable)
-      
-      this.db = await sqlite.createConnection(
-        'knowledge_base',
-        false,
-        'no-encryption',
-        1,
-        false
-      )
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (retryCount < maxRetries) {
+      try {
+        console.log(`[Mobile KB] SQLite initialization attempt ${retryCount + 1}/${maxRetries}`)
+        
+        // 更安全的 Capacitor 环境检查
+        if (typeof window === 'undefined' || !('Capacitor' in window)) {
+          throw new Error('Capacitor environment not available')
+        }
+        
+        // 动态导入 Capacitor 以避免模块加载时的问题
+        const { Capacitor } = await import('@capacitor/core')
+        
+        if (!Capacitor.isNativePlatform()) {
+          throw new Error('Not running on native platform')
+        }
+        
+        // 检查 SQLite 插件是否可用
+        if (!CapacitorSQLite) {
+          throw new Error('CapacitorSQLite plugin not available')
+        }
+        
+        // 验证插件方法是否可用
+        if (typeof CapacitorSQLite.echo !== 'function') {
+          throw new Error('CapacitorSQLite plugin methods not available')
+        }
+        
+        // 测试插件是否响应
+        try {
+          await CapacitorSQLite.echo({ value: 'test' })
+          console.log('[Mobile KB] SQLite plugin echo test passed')
+        } catch (echoError) {
+          console.warn('[Mobile KB] SQLite plugin echo test failed:', echoError)
+          // 不抛出错误，继续尝试
+        }
+        
+        // 添加更长的延迟以确保插件完全加载
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // 创建 SQLiteConnection 并进行一致性检查（遵循官方推荐流程，避免原生崩溃）
+        try {
+          this.sqlite = new SQLiteConnection(CapacitorSQLite)
+        } catch (connectionError) {
+          console.error('[Mobile KB] Failed to create SQLiteConnection:', connectionError)
+          throw new Error(`SQLiteConnection creation failed: ${connectionError}`)
+        }
 
-      // 打开数据库
-      await this.db?.open()
+        console.log('[Mobile KB] Checking SQLite connections consistency...')
+        try {
+          await this.sqlite.checkConnectionsConsistency()
+        } catch (consistencyError) {
+          console.warn('[Mobile KB] checkConnectionsConsistency failed (will continue):', consistencyError)
+        }
 
-      // 创建表结构
-      await this.initTables()
-    } catch (error) {
-      console.error('[Mobile KB] SQLite initialization failed:', error)
-      throw error
+        // 复用已存在连接或创建新连接
+        const dbName = 'knowledge_base'
+        const isConn = await this.sqlite.isConnection(dbName, false).catch(() => ({ result: false as boolean }))
+        if (isConn && (isConn as any).result) {
+          console.log('[Mobile KB] Existing SQLite connection found, retrieving...')
+          this.db = await this.sqlite.retrieveConnection(dbName, false)
+        } else {
+          console.log('[Mobile KB] Creating SQLite connection...')
+          this.db = await this.sqlite.createConnection(
+            dbName,
+            false,
+            'no-encryption',
+            1,
+            false
+          )
+        }
+        
+        if (!this.db) {
+          throw new Error('Failed to create SQLite connection - returned null')
+        }
+        
+        console.log('[Mobile KB] SQLite connection created, opening database...')
+        
+        // 打开数据库
+        await this.db.open()
+
+        // 保存到连接存储（仅 Web 需要；Android/iOS 未实现该方法）
+        try {
+          const { Capacitor } = await import('@capacitor/core')
+          const platform = Capacitor.getPlatform()
+          if (platform === 'web' && typeof (this.sqlite as any).saveToStore === 'function') {
+            await this.sqlite.saveToStore(dbName)
+          }
+        } catch (storeError) {
+          console.warn('[Mobile KB] saveToStore skipped or failed (non-fatal):', storeError)
+        }
+        
+        console.log('[Mobile KB] Database opened, initializing tables...')
+        
+        // 创建表结构
+        await this.initTables()
+        
+        console.log('[Mobile KB] SQLite initialization completed successfully')
+        return // 成功，退出重试循环
+        
+      } catch (error) {
+        retryCount++
+        console.error(`[Mobile KB] SQLite initialization failed (attempt ${retryCount}/${maxRetries}):`, error)
+        
+        // 清理可能的部分初始化状态
+        if (this.db) {
+          try {
+            await this.db.close()
+          } catch (closeError) {
+            console.warn('[Mobile KB] Failed to close database during cleanup:', closeError)
+          }
+          this.db = null
+        }
+
+        // 关闭并清理连接仓库中的状态
+        if (this.sqlite) {
+          try {
+            await this.sqlite.closeConnection('knowledge_base', false)
+          } catch (closeConnError) {
+            console.warn('[Mobile KB] Failed to close SQLite connection during cleanup:', closeConnError)
+          }
+        }
+        
+        if (retryCount >= maxRetries) {
+          console.error('[Mobile KB] All SQLite initialization attempts failed, throwing error')
+          throw error
+        }
+        
+        // 等待更长时间后重试，给插件更多时间初始化
+        await new Promise(resolve => setTimeout(resolve, 2000 * retryCount))
+      }
     }
   }
 
@@ -104,19 +298,6 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
     }
   }
 
-  /**
-   * 初始化后备存储方案（纯LocalForage）
-   */
-  private async initFallbackStorage(): Promise<void> {
-    try {
-      // 使用LocalForage作为后备方案
-      this.isInitialized = true
-      console.log('[Mobile KB] Fallback storage initialized')
-    } catch (error) {
-      console.error('[Mobile KB] Even fallback storage failed:', error)
-      throw new Error('Unable to initialize any storage method')
-    }
-  }
 
   private async initTables() {
     if (!this.db) throw new Error('Database not initialized')
@@ -169,18 +350,19 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
 
   async list(): Promise<KnowledgeBase[]> {
     await this.ensureInitialized()
-    if (!this.db) throw new Error('Database not initialized')
-
-    const result = await this.db.query('SELECT * FROM knowledge_base ORDER BY created_at DESC')
     
-    return result.values?.map((row: any) => ({
-      id: row.id,
-      name: row.name,
-      embeddingModel: row.embedding_model || 'simple-text',
-      rerankModel: row.rerank_model || 'none',
-      visionModel: row.vision_model || 'none',
-      createdAt: row.created_at,
-    })) || []
+    return this.safeDbOperation(async () => {
+      const result = await this.db!.query('SELECT * FROM knowledge_base ORDER BY created_at DESC')
+      
+      return result.values?.map((row: any) => ({
+        id: row.id,
+        name: row.name,
+        embeddingModel: row.embedding_model || 'simple-text',
+        rerankModel: row.rerank_model || 'none',
+        visionModel: row.vision_model || 'none',
+        createdAt: row.created_at,
+      })) || []
+    }, 'list')
   }
 
   async create(createParams: {

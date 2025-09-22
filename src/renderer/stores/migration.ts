@@ -16,8 +16,8 @@ import {
   artifactSessionEN,
   defaultSessionsForCN,
   defaultSessionsForEN,
-  imageCreatorSessionForCN,
-  imageCreatorSessionForEN,
+  // imageCreatorSessionForCN,
+  // imageCreatorSessionForEN,
   mermaidSessionCN,
   mermaidSessionEN,
 } from '@/packages/initial_data'
@@ -166,19 +166,20 @@ async function migrate_0_to_1(dataStore: MigrateStore) {
 }
 
 async function migrate_1_to_2(dataStore: MigrateStore) {
-  const sessions = await dataStore.getData<Session[]>(StorageKey.ChatSessions, [])
-  const lang = await platform.getLocale()
-  if (lang.startsWith('zh')) {
-    if (sessions.find((session) => session.id === imageCreatorSessionForCN.id)) {
-      return
-    }
-    await dataStore.setData(StorageKey.ChatSessions, [...sessions, imageCreatorSessionForCN])
-  } else {
-    if (sessions.find((session) => session.id === imageCreatorSessionForEN.id)) {
-      return
-    }
-    await dataStore.setData(StorageKey.ChatSessions, [...sessions, imageCreatorSessionForEN])
-  }
+  // Image creator sessions are temporarily disabled
+  // const sessions = await dataStore.getData<Session[]>(StorageKey.ChatSessions, [])
+  // const lang = await platform.getLocale()
+  // if (lang.startsWith('zh')) {
+  //   if (sessions.find((session) => session.id === imageCreatorSessionForCN.id)) {
+  //     return
+  //   }
+  //   await dataStore.setData(StorageKey.ChatSessions, [...sessions, imageCreatorSessionForCN])
+  // } else {
+  //   if (sessions.find((session) => session.id === imageCreatorSessionForEN.id)) {
+  //     return
+  //   }
+  //   await dataStore.setData(StorageKey.ChatSessions, [...sessions, imageCreatorSessionForEN])
+  // }
 }
 
 async function migrate_2_to_3(dataStore: MigrateStore) {

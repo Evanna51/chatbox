@@ -150,6 +150,9 @@ const configuration: webpack.Configuration = {
      */
     new webpack.EnvironmentPlugin({
       NODE_ENV: 'development',
+      CHATBOX_BUILD_TARGET: 'unknown',
+      CHATBOX_BUILD_PLATFORM: 'unknown',
+      USE_LOCAL_API: '',
     }),
 
     new webpack.LoaderOptionsPlugin({

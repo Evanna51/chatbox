@@ -17,10 +17,25 @@ import { CHATBOX_BUILD_TARGET } from '../variables'
 const store = localforage.createInstance({ name: 'chatboxstore' })
 
 export default class WebPlatform implements Platform {
-  public type: PlatformType = CHATBOX_BUILD_TARGET === 'mobile_app' ? 'mobile' : 'web'
+  public type: PlatformType = this.detectPlatformType()
 
-  public exporter = CHATBOX_BUILD_TARGET === 'mobile_app' ? new MobileExporter() : new WebExporter()
+  public exporter = this.type === 'mobile' ? new MobileExporter() : new WebExporter()
   private _kbController?: KnowledgeBaseController
+
+  private detectPlatformType(): PlatformType {
+    // 首先检查构建目标
+    if (CHATBOX_BUILD_TARGET === 'mobile_app') {
+      return 'mobile'
+    }
+    
+    // 然后检查是否在 Capacitor 环境中
+    if (typeof window !== 'undefined' && 'Capacitor' in window) {
+      return 'mobile'
+    }
+    
+    // 默认为 web
+    return 'web'
+  }
 
   constructor() {}
 
@@ -250,11 +265,16 @@ export default class WebPlatform implements Platform {
   }
 
   public getKnowledgeBaseController(): KnowledgeBaseController {
-    if (CHATBOX_BUILD_TARGET === 'mobile_app') {
+    if (CHATBOX_BUILD_TARGET === 'mobile_app' || this.type === 'mobile') {
       if (!this._kbController) {
-        // 使用优化后的 MobileKnowledgeBaseController，已解决循环依赖问题
-        this._kbController = new MobileKnowledgeBaseController();
-        console.log('[Platform] 📦 Initialized with MobileKnowledgeBaseController (SQLite + AI enhanced)')
+        try {
+          // 使用优化后的 MobileKnowledgeBaseController，已解决循环依赖问题
+          this._kbController = new MobileKnowledgeBaseController();
+          console.log('[Platform] 📦 Initialized with MobileKnowledgeBaseController (SQLite + AI enhanced)')
+        } catch (error) {
+          console.error('[Platform] Failed to initialize MobileKnowledgeBaseController:', error)
+          throw new Error(`Failed to initialize knowledge base controller: ${error instanceof Error ? error.message : String(error)}`)
+        }
       }
       return this._kbController
     } else {

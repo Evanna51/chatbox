@@ -113,14 +113,14 @@ const KnowledgeBasePage: React.FC = () => {
     }
   }, [canUseChatboxAIProvider])
 
-  const { providers } = useProviders()
+  const { providers = [] } = useProviders()
 
   const getModelList = useCallback(
     (filter: (model: ProviderModelInfo) => boolean) => {
       return compact(
         flatten(
-          providers.map((provider) => {
-            return provider.models?.filter(filter).map((model) => {
+          providers?.map?.((provider) => {
+            return provider?.models?.filter(filter).map((model) => {
               return {
                 label: `${provider.name} | ${model.nickname || model.modelId}`,
                 value: `${provider.id}:${model.modelId}`,

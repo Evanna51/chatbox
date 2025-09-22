@@ -115,6 +115,9 @@ const configuration: webpack.Configuration = {
     new webpack.EnvironmentPlugin({
       NODE_ENV: 'production',
       DEBUG_PROD: false,
+      CHATBOX_BUILD_TARGET: 'unknown',
+      CHATBOX_BUILD_PLATFORM: 'unknown',
+      USE_LOCAL_API: '',
     }),
 
     TanStackRouterWebpack({
