@@ -36,6 +36,7 @@ import {
   AnalysisMode,
   DEFAULT_ANALYSIS_CONFIG
 } from '../packages/memory-collector'
+import { generateSafeFilename } from '../utils'
 
 interface MemoryCollectorProps {
   sessions: Session[]
@@ -155,7 +156,37 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
 
     try {
       const content = exportMemoryCollectionAsJSON(analysisResult)
-      const filename = `analysis-${analysisResult.sessionId}-${Date.now()}.json`
+      
+      // 使用主题名字生成安全的文件名
+      let baseName = ''
+      
+      // 优先使用会话名称作为基础名称
+      if (currentSession?.name) {
+        baseName = currentSession.name
+      } else {
+        baseName = analysisResult.copilotName || 'analysis'
+      }
+      
+      // 如果是分析特定话题（非全部话题），添加话题信息
+      if (selectedThreadId && selectedThreadId !== 'all_threads' && currentSession) {
+        let threadName = ''
+        if (selectedThreadId === 'current') {
+          threadName = currentSession.threadName || '当前话题'
+        } else {
+          const selectedThread = currentSession.threads?.find(t => t.id === selectedThreadId)
+          threadName = selectedThread?.name || ''
+        }
+        
+        if (threadName) {
+          baseName = `${baseName}-${threadName}`
+        }
+      }
+      
+      // 生成安全的文件名，限制长度为30个字符（为日期和扩展名留出空间）
+      const safeBaseName = generateSafeFilename(baseName, 30)
+      // 只保留日期部分 (YYYYMMDD)
+      const dateStr = new Date().toISOString().substring(0, 10).replace(/-/g, '')
+      const filename = `${safeBaseName}-${dateStr}.json`
       
       const blob = new Blob([content], { type: 'application/json' })
       const url = URL.createObjectURL(blob)

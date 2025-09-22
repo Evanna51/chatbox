@@ -469,7 +469,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
     return (
       <Box
         pt={0}
-        pb={isSmallScreen ? 'md' : 'sm'}
+        pb={isSmallScreen ? 'md' : 'xs'}
         px={isSmallScreen ? '0.3rem' : '1rem'}
         id={dom.InputBoxID}
         {...getRootProps()}
@@ -527,7 +527,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             </Flex>
           )}
 
-          <Flex px="sm" pb="sm" align="flex-end" justify="space-between" gap="lg">
+          <Flex px="sm" pb="xs" align="flex-end" justify="space-between" gap="lg">
             <Flex gap="md" flex="0 1 auto" className="!hidden sm:!flex">
               {showRollbackThreadButton ? (
                 <Tooltip label={t('Back to Previous')} withArrow position="top-start">
@@ -663,25 +663,27 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
             </ActionIcon> */}
             </Flex>
 
-            <Flex className="sm:!hidden" gap="xs">
+            <Flex className="sm:!hidden" gap="0" justify="space-between" flex="0 1 auto">
               {sessionType !== 'picture' ? (
                 <>
                   <Menu shadow="md" position="top-start">
                     <Menu.Target>
-                      <div><ActionIcon
-                        variant="transparent"
-                        w={20}
-                        h={20}
-                        miw={20}
-                        mih={20}
-                        bd="none"
-                        color="chatbox-secondary"
-                      >
-                        <IconCirclePlus strokeWidth={1.8} />
-                        
-                      </ActionIcon>
-                      文件
-                      </div>
+                      <Flex direction="column" align="center" gap="2px" className="cursor-pointer" w="36px">
+                        <ActionIcon
+                          variant="transparent"
+                          w={20}
+                          h={20}
+                          miw={20}
+                          mih={20}
+                          bd="none"
+                          color="chatbox-secondary"
+                        >
+                          <IconCirclePlus strokeWidth={1.8} />
+                        </ActionIcon>
+                        <Text size="10px" c="chatbox-secondary" className="leading-none text-center">
+                          {t('Select File')}
+                        </Text>
+                      </Flex>
                     </Menu.Target>
 
                     <Menu.Dropdown>
@@ -698,53 +700,78 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     </Menu.Dropdown>
                   </Menu>
 
-                  <ActionIcon
-                    variant="transparent"
-                    w={20}
-                    h={20}
-                    miw={20}
-                    mih={20}
-                    bd="none"
-                    color={webBrowsingMode ? 'chatbox-brand' : 'chatbox-secondary'}
+                  <Flex 
+                    direction="column" 
+                    align="center" 
+                    gap="2px" 
+                    className="cursor-pointer"
+                    w="36px"
                     onClick={() => {
                       setWebBrowsingMode(!webBrowsingMode)
                       dom.focusMessageInput()
                     }}
-                    title={t('Web Browsing')}
                   >
-                    
-                    <IconWorld strokeWidth={1.8} />
-                  </ActionIcon>
+                    <ActionIcon
+                      variant="transparent"
+                      w={20}
+                      h={20}
+                      miw={20}
+                      mih={20}
+                      bd="none"
+                      color={webBrowsingMode ? 'chatbox-brand' : 'chatbox-secondary'}
+                    >
+                      <IconWorld strokeWidth={1.8} />
+                    </ActionIcon>
+                    <Text size="10px" c={webBrowsingMode ? 'chatbox-brand' : 'chatbox-secondary'} className="leading-none text-center">
+                      {t('Web Browsing')}
+                    </Text>
+                  </Flex>
 
                   {featureFlags.knowledgeBase && (
                     <KnowledgeBaseMenu currentKnowledgeBaseId={knowledgeBase?.id} onSelect={handleKnowledgeBaseSelect}>
-                      <ActionIcon
-                        variant="transparent"
-                        w={20}
-                        h={20}
-                        miw={20}
-                        mih={20}
-                        bd="none"
-                        color={knowledgeBase ? 'chatbox-brand' : 'chatbox-secondary'}
-                      >
-                        <IconVocabulary strokeWidth={1.8} />
-                      </ActionIcon>
+                      <Flex direction="column" align="center" gap="2px" className="cursor-pointer" w="36px">
+                        <ActionIcon
+                          variant="transparent"
+                          w={20}
+                          h={20}
+                          miw={20}
+                          mih={20}
+                          bd="none"
+                          color={knowledgeBase ? 'chatbox-brand' : 'chatbox-secondary'}
+                        >
+                          <IconVocabulary strokeWidth={1.8} />
+                        </ActionIcon>
+                        <Text size="10px" c={knowledgeBase ? 'chatbox-brand' : 'chatbox-secondary'} className="leading-none text-center">
+                          {t('Knowledge Base')}
+                        </Text>
+                      </Flex>
                     </KnowledgeBaseMenu>
                   )}
 
-                  <ActionIcon
-                    variant="transparent"
-                    w={20}
-                    h={20}
-                    miw={20}
-                    mih={20}
-                    bd="none"
-                    color="chatbox-secondary"
-                    disabled={!onClickSessionSettings}
+                  <Flex 
+                    direction="column" 
+                    align="center" 
+                    gap="2px" 
+                    className="cursor-pointer"
+                    w="36px"
                     onClick={onClickSessionSettings}
                   >
-                    <IconAdjustmentsHorizontal strokeWidth={1.8} />
-                  </ActionIcon>
+                    <ActionIcon
+                      variant="transparent"
+                      w={20}
+                      h={20}
+                      miw={20}
+                      mih={20}
+                      bd="none"
+                      color="chatbox-secondary"
+                      disabled={!onClickSessionSettings}
+                    >
+                      <IconAdjustmentsHorizontal strokeWidth={1.8} />
+                    </ActionIcon>
+                    <Text size="10px" c="chatbox-secondary" className="leading-none text-center">
+                      {t('Settings')}
+                    </Text>
+                  </Flex>
                 </>
               ) : null}
             </Flex>
@@ -790,16 +817,18 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
               <ActionIcon
                 disabled={disableSubmit && !generating}
                 radius={18}
-                size={isSmallScreen ? 24 : 36}
+                size={isSmallScreen ? 32 : 36}
                 onClick={generating ? onStopGenerating : () => handleSubmit()}
                 className={cn(
                   // 'mt-[-6px] mb-[2px]',
-                  disableSubmit &&
-                    !generating &&
-                    '!text-white !bg-[var(--mantine-color-chatbox-background-tertiary-text)]'
+                  generating
+                    ? '!text-white !bg-red-500' // 生成中：Tailwind 红色
+                    : disableSubmit
+                    ? '!text-white !bg-gray-600/10' // 禁用：Tailwind 灰色
+                    :''
                 )}
               >
-                {generating ? <IconPlayerStopFilled size={20} /> : <IconArrowUp size={16} />}
+                {generating ? <IconPlayerStopFilled size={22} /> : <IconArrowUp size={22} />}
               </ActionIcon>
             </Flex>
           </Flex>

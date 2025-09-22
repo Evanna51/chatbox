@@ -430,6 +430,7 @@ export interface Settings extends SessionSettings {
   showFirstTokenLatency?: boolean
 
   theme: Theme
+  colorMode?: ColorMode // 新增独立的深浅色模式设置
   language: Language
   languageInited?: boolean
   fontSize: number
@@ -564,6 +565,26 @@ export interface Toast {
 export enum Theme {
   Dark,
   Light,
+  System,
+  // 清新主题系列
+  FreshMint,    // 薄荷清新 - 以薄荷绿为主
+  OceanBreeze,  // 海洋微风 - 以天空蓝为主
+  ForestFresh,  // 森林清新 - 以翠绿色为主
+  SunsetGlow,   // 夕阳暖光 - 以阳光橙为主
+  LavenderDream, // 薰衣草梦境 - 以薰衣草紫为主
+  CherryBlossom, // 樱花粉嫩 - 以清新粉色为主
+  // 保留深色版本以兼容旧设置
+  FreshMintDark,    // 薄荷清新深色版 (deprecated)
+  OceanBreezeDark,  // 海洋微风深色版 (deprecated)
+  ForestFreshDark,  // 森林清新深色版 (deprecated)
+  SunsetGlowDark,   // 夕阳暖光深色版 (deprecated)
+  LavenderDreamDark, // 薰衣草梦境深色版 (deprecated)
+  CherryBlossomDark, // 樱花粉嫩深色版 (deprecated)
+}
+
+export enum ColorMode {
+  Light,
+  Dark,
   System,
 }
 

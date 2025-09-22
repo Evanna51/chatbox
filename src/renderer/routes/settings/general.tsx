@@ -18,7 +18,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { mapValues, uniqBy } from 'lodash'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { type Language, type ProviderInfo, type Settings, Theme } from 'src/shared/types'
+import { type Language, type ProviderInfo, type Settings, Theme, ColorMode } from 'src/shared/types'
 import LazySlider from '@/components/LazySlider'
 import { useSettings } from '@/hooks/useSettings'
 import { languageNameMap, languages } from '@/i18n/locales'
@@ -78,15 +78,43 @@ function RouteComponent() {
             },
           }}
           data={[
-            { value: `${Theme.System}`, label: t('Follow System') },
-            { value: `${Theme.Light}`, label: t('Light Mode') },
-            { value: `${Theme.Dark}`, label: t('Dark Mode') },
+            { value: `${Theme.System}`, label: '默认' },
+            // 清新主题系列
+            { value: `${Theme.FreshMint}`, label: '' + t('Fresh Mint') },
+            { value: `${Theme.OceanBreeze}`, label: '' + t('Ocean Breeze') },
+            { value: `${Theme.ForestFresh}`, label: '' + t('Forest Fresh') },
+            { value: `${Theme.SunsetGlow}`, label: '' + t('Sunset Glow') },
+            { value: `${Theme.LavenderDream}`, label: '' + t('Lavender Dream') },
+            { value: `${Theme.CherryBlossom}`, label: '' + t('Cherry Blossom') },
           ]}
           value={`${settings.theme}`}
           onChange={(val) => {
             if (val) {
+              setSettings({ theme: parseInt(val) })
+            }
+          }}
+        />
+
+        {/* color mode */}
+        <Select
+          maw={320}
+          comboboxProps={{ withinPortal: true, withArrow: true }}
+          label={t('Color Mode')}
+          styles={{
+            label: {
+              fontWeight: 400,
+            },
+          }}
+          data={[
+            { value: `${ColorMode.System}`, label: t('Follow System') },
+            { value: `${ColorMode.Light}`, label: t('Light Mode') },
+            { value: `${ColorMode.Dark}`, label: t('Dark Mode') },
+          ]}
+          value={`${settings.colorMode ?? ColorMode.System}`}
+          onChange={(val) => {
+            if (val) {
               setSettings({
-                theme: parseInt(val),
+                colorMode: parseInt(val),
               })
             }
           }}

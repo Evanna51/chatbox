@@ -173,10 +173,10 @@ const SessionSettingsModal = NiceModal.create(
           },
         }}
       >
-        <DialogTitle>{t('Conversation Settings')}shiwoma</DialogTitle>
+        <DialogTitle>{t('Conversation Settings')}</DialogTitle>
         <DialogContent>
           <DialogContentText></DialogContentText>
-
+          <Flex align="center" gap="sm">
           <EditableAvatar
             onChange={(event) => {
               if (!event.target.files) {
@@ -212,8 +212,8 @@ const SessionSettingsModal = NiceModal.create(
               <ImageIcon
                 fontSize="large"
                 sx={{
-                  width: '60px',
-                  height: '60px',
+                  width: '20px',
+                  height: '20px',
                 }}
               />
             ) : globalSettings.defaultAssistantAvatarKey ? (
@@ -235,8 +235,10 @@ const SessionSettingsModal = NiceModal.create(
             value={editingData.name}
             onChange={(e) => setEditingData({ ...editingData, name: e.target.value })}
           />
+          </Flex>
           <div className="mt-1">
             <TextField
+              size="small"
               margin="dense"
               label={t('Instruction (System Prompt)')}
               placeholder={t('Copilot Prompt Demo') || ''}
@@ -244,7 +246,7 @@ const SessionSettingsModal = NiceModal.create(
               variant="outlined"
               multiline
               minRows={2}
-              maxRows={20}
+              maxRows={16}
               value={systemPrompt}
               onChange={(event) => setSystemPrompt(event.target.value)}
             />
@@ -714,10 +716,10 @@ export function ChatConfig({
                 value={settings?.autoSummarizeTokenThreshold}
                 onChange={(v) => onSettingsChange({ autoSummarizeTokenThreshold: typeof v === 'number' ? v : undefined })}
                 min={500}
-                max={64*1024}
+                max={64*1000}
                 step={100}
                 allowDecimal={false}
-                placeholder={(globalSettings?.autoSummarizeTokenThreshold ?? 6*1024).toString()}
+                placeholder={(globalSettings?.autoSummarizeTokenThreshold ?? 6*1000).toString()}
               />
             </Flex>
           </Stack>

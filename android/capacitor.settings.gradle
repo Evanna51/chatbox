@@ -28,3 +28,6 @@ project(':capacitor-toast').projectDir = new File('../node_modules/@capacitor/to
 
 include ':capacitor-plugin-safe-area'
 project(':capacitor-plugin-safe-area').projectDir = new File('../node_modules/capacitor-plugin-safe-area/android')
+
+include ':capacitor-stream-http'
+project(':capacitor-stream-http').projectDir = new File('../node_modules/capacitor-stream-http/android')

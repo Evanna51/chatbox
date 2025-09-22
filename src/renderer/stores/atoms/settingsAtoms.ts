@@ -3,7 +3,7 @@ import { atomWithStorage } from 'jotai/utils'
 import { focusAtom } from 'jotai-optics'
 import { omit } from 'lodash'
 import * as defaults from '../../../shared/defaults'
-import { type SessionSettings, type Settings, type SettingWindowTab, Theme } from '../../../shared/types'
+import { type SessionSettings, type Settings, type SettingWindowTab, Theme, ColorMode } from '../../../shared/types'
 import platform from '../../platform'
 import storage, { StorageKey } from '../../storage'
 
@@ -12,15 +12,8 @@ const _settingsAtom = atomWithStorage<Settings>(
   StorageKey.Settings,
   {
     ...defaults.settings(),
-    theme: (() => {
-      const initialTheme = localStorage.getItem('initial-theme')
-      if (initialTheme === 'light') {
-        return Theme.Light
-      } else if (initialTheme === 'dark') {
-        return Theme.Dark
-      }
-      return Theme.System
-    })(),
+    theme: Theme.System, // 默认使用系统主题
+    colorMode: ColorMode.System, // 默认跟随系统颜色模式
   },
   storage
 )
@@ -67,6 +60,7 @@ export const showFirstTokenLatencyAtom = focusAtom(settingsAtom, (optic) => opti
 export const userAvatarKeyAtom = focusAtom(settingsAtom, (optic) => optic.prop('userAvatarKey'))
 export const defaultAssistantAvatarKeyAtom = focusAtom(settingsAtom, (optic) => optic.prop('defaultAssistantAvatarKey'))
 export const themeAtom = focusAtom(settingsAtom, (optic) => optic.prop('theme'))
+export const colorModeAtom = focusAtom(settingsAtom, (optic) => optic.prop('colorMode'))
 export const fontSizeAtom = focusAtom(settingsAtom, (optic) => optic.prop('fontSize'))
 export const spellCheckAtom = focusAtom(settingsAtom, (optic) => optic.prop('spellCheck'))
 export const allowReportingAndTrackingAtom = focusAtom(settingsAtom, (optic) => optic.prop('allowReportingAndTracking'))

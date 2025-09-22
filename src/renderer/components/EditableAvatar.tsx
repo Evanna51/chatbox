@@ -29,7 +29,7 @@ export default function EditableAvatar(props: Props) {
       sx={{
         display: 'flex',
         justifyContent: 'center',
-        paddingBottom: '15px',
+        paddingBottom: '1px',
       }}
     >
       <input
@@ -56,19 +56,22 @@ export default function EditableAvatar(props: Props) {
               size={'small'}
               disableRipple
               sx={{
+                marginLeft: '12px',
+                width: '16px',
+                height: '16px',
                 backgroundColor: theme.palette.error.main,
                 color: theme.palette.error.contrastText,
               }}
             >
-              <DeleteIcon fontSize="small" />
+              <DeleteIcon fontSize="small" sx={{width: 12, height: 12}}/>
             </IconButton>
           </Box>
         }
       >
         <Avatar
           sx={{
-            width: '80px',
-            height: '80px',
+            width: '32px',
+            height: '32px',
             ...props.sx,
           }}
           className="cursor-pointer"

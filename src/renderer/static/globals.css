@@ -22,6 +22,57 @@
   --chatbox-spacing-lg: 1.25rem;
   --chatbox-spacing-xl: 1.5rem;
   --chatbox-spacing-xxl: 2rem;
+
+  /* 主题色系 - 默认主题 (薄荷绿 #00b894) */
+  --color-primary-50: 155 248 244;
+  --color-primary-100: 135 248 239;
+  --color-primary-200: 95 248 229;
+  --color-primary-300: 55 248 219;
+  --color-primary-400: 20 228 199;
+  --color-primary-500: 0 184 148;   /* 默认主色 #00b894 */
+  --color-primary-600: 0 154 118;
+  --color-primary-700: 0 124 88;
+  --color-primary-800: 0 94 58;
+  --color-primary-900: 0 64 28;
+
+  /* 次要色系 - 默认主题 (天空蓝 #74b9ff) */
+  --color-secondary-50: 216 233 255;
+  --color-secondary-100: 196 228 255;
+  --color-secondary-200: 156 218 255;
+  --color-secondary-300: 116 208 255;
+  --color-secondary-400: 116 185 255;
+  --color-secondary-500: 116 185 255;   /* 默认次色 #74b9ff */
+  --color-secondary-600: 74 155 204;
+  --color-secondary-700: 74 125 174;
+  --color-secondary-800: 74 95 144;
+  --color-secondary-900: 74 65 114;
+}
+
+/* 深色主题 */
+[data-mantine-color-scheme="dark"] {
+  /* 深色主题主色 - 反转薄荷绿梯度 */
+  --color-primary-50: 0 64 28;
+  --color-primary-100: 0 94 58;
+  --color-primary-200: 0 124 88;
+  --color-primary-300: 0 154 118;
+  --color-primary-400: 0 184 148;
+  --color-primary-500: 20 228 199;   /* 深色主题主色 */
+  --color-primary-600: 55 248 219;
+  --color-primary-700: 95 248 229;
+  --color-primary-800: 135 248 239;
+  --color-primary-900: 155 248 244;
+
+  /* 深色主题次色 - 反转天空蓝梯度 */
+  --color-secondary-50: 74 65 114;
+  --color-secondary-100: 74 95 144;
+  --color-secondary-200: 74 125 174;
+  --color-secondary-300: 74 155 204;
+  --color-secondary-400: 116 185 255;
+  --color-secondary-500: 116 208 255;   /* 深色主题次色 */
+  --color-secondary-600: 156 218 255;
+  --color-secondary-700: 196 228 255;
+  --color-secondary-800: 216 233 255;
+  --color-secondary-900: 236 243 255;
 }
 
 .mantine-Spotlight-actionsGroup {

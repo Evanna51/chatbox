@@ -7,6 +7,7 @@ import {
   type SessionSettings,
   type Settings,
   Theme,
+  ColorMode,
 } from './types'
 
 export function settings(): Settings {
@@ -111,6 +112,7 @@ export function settings(): Settings {
     userAvatarKey: '',
     defaultAssistantAvatarKey: '',
     theme: Theme.System,
+    colorMode: ColorMode.System, // 新增独立的深浅色模式设置
     language: 'zh-Hans',
     fontSize: 14,
     spellCheck: true,
@@ -185,7 +187,7 @@ export function chatSessionSettings(): SessionSettings {
     maxContextMessageCount: 6,
     autoSummarize: false, // 默认关闭自动总结
     autoSummarizeMessageThreshold: 16, // 超过20条消息时触发
-    autoSummarizeTokenThreshold: 6*1024, // 超过6k tokens时触发
+    autoSummarizeTokenThreshold: 6*1000, // 超过6k tokens时触发
   }
 }
 

@@ -211,7 +211,7 @@ export function shouldTriggerSummary(
   }
 
   let messageThreshold = settings.autoSummarizeMessageThreshold || 16
-  const tokenThreshold = settings.autoSummarizeTokenThreshold || 6*1024
+  const tokenThreshold = settings.autoSummarizeTokenThreshold || 6*1000
 
   // 智能调整：确保总结阈值不超过上下文限制
   // 这样可以避免AI在总结之前就开始"忘记"对话内容

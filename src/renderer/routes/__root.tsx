@@ -5,7 +5,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import { createRootRoute, Outlet, useLocation, useNavigate } from '@tanstack/react-router'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { useEffect, useMemo, useRef } from 'react'
-import { type RemoteConfig, type Settings, Theme } from '@/../shared/types'
+import { type RemoteConfig, type Settings, Theme, ColorMode } from '@/../shared/types'
+import { mantineThemeColors, getMantineThemeVariant, getMantineThemeColors, getMantineThemeColorTuples } from '../theme/themeConfigs'
 import ExitFullscreenButton from '@/components/ExitFullscreenButton'
 import Toasts from '@/components/Toasts'
 import PerformanceMonitor from '@/components/PerformanceMonitor'
@@ -121,17 +122,13 @@ function Root() {
   const sidebarWidth = useSidebarWidth()
 
   const _theme = useAtomValue(atoms.themeAtom)
+  const _realTheme = useAtomValue(atoms.realThemeAtom)
   const { setColorScheme } = useMantineColorScheme()
   // biome-ignore lint/correctness/useExhaustiveDependencies: setColorScheme is stable
   useEffect(() => {
-    if (_theme === Theme.Dark) {
-      setColorScheme('dark')
-    } else if (_theme === Theme.Light) {
-      setColorScheme('light')
-    } else {
-      setColorScheme('auto')
-    }
-  }, [_theme])
+    // 使用 realTheme 来设置 Mantine 的颜色方案，确保与 data-mantine-color-scheme 一致
+    setColorScheme(_realTheme === 'dark' ? 'dark' : 'light')
+  }, [_realTheme])
 
   // FIXME: 为了从LocalStroage中初始化这两个atom，否则首次get这两个atom可能得到默认值
   useAtom(atoms.chatSessionSettingsAtom)
@@ -210,16 +207,31 @@ function Root() {
   )
 }
 
-const creteMantineTheme = (scale = 1) =>
-  createTheme({
+
+const creteMantineTheme = (scale = 1, theme: Theme, colorMode: ColorMode, realTheme: 'light' | 'dark') => {
+  const lightThemeColorTuples = getMantineThemeColorTuples(theme, 'light')
+  const darkThemeColorTuples = getMantineThemeColorTuples(theme, 'dark')
+  
+  return createTheme({
     /** Put your mantine theme override here */
     scale,
     primaryColor: 'chatbox-brand',
     colors: {
+      // 先定义基础颜色数组
+      'chatbox-brand-light': lightThemeColorTuples.brand,
+      'chatbox-brand-dark': darkThemeColorTuples.brand,
+      'chatbox-success-light': lightThemeColorTuples.success,
+      'chatbox-success-dark': darkThemeColorTuples.success,
+      'chatbox-error-light': lightThemeColorTuples.error,
+      'chatbox-error-dark': darkThemeColorTuples.error,
+      'chatbox-warning-light': lightThemeColorTuples.warning,
+      'chatbox-warning-dark': darkThemeColorTuples.warning,
+      
+      // 然后使用 virtualColor 引用它们
       'chatbox-brand': virtualColor({
         name: 'chatbox-brand',
-        dark: 'blue',
-        light: 'blue',
+        dark: 'chatbox-brand-dark',
+        light: 'chatbox-brand-light',
       }),
       'chatbox-gray': virtualColor({
         name: 'chatbox-gray',
@@ -228,18 +240,18 @@ const creteMantineTheme = (scale = 1) =>
       }),
       'chatbox-success': virtualColor({
         name: 'chatbox-success',
-        dark: 'teal',
-        light: 'teal',
+        dark: 'chatbox-success-dark',
+        light: 'chatbox-success-light',
       }),
       'chatbox-error': virtualColor({
         name: 'chatbox-error',
-        dark: 'red',
-        light: 'red',
+        dark: 'chatbox-error-dark',
+        light: 'chatbox-error-light',
       }),
       'chatbox-warning': virtualColor({
         name: 'chatbox-warning',
-        dark: 'yellow',
-        light: 'yellow',
+        dark: 'chatbox-warning-dark',
+        light: 'chatbox-warning-light',
       }),
 
       'chatbox-primary': [
@@ -363,6 +375,127 @@ const creteMantineTheme = (scale = 1) =>
         'var(--mantine-color-red-1)',
         'var(--mantine-color-red-1)',
         'var(--mantine-color-red-1)',
+      ],
+
+      // Text color variants
+      'chatbox-primary-text': [
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-9)',
+        'var(--mantine-color-gray-9)',
+        'var(--mantine-color-gray-9)',
+        'var(--mantine-color-gray-9)',
+        'var(--mantine-color-gray-9)',
+      ],
+      'chatbox-secondary-text': [
+        'var(--mantine-color-gray-3)',
+        'var(--mantine-color-gray-3)',
+        'var(--mantine-color-gray-3)',
+        'var(--mantine-color-gray-3)',
+        'var(--mantine-color-gray-3)',
+        'var(--mantine-color-gray-7)',
+        'var(--mantine-color-gray-7)',
+        'var(--mantine-color-gray-7)',
+        'var(--mantine-color-gray-7)',
+        'var(--mantine-color-gray-7)',
+      ],
+      'chatbox-tertiary-text': [
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+      ],
+
+      // Brand and status text colors
+      'chatbox-brand-text': virtualColor({
+        name: 'chatbox-brand-text',
+        dark: 'chatbox-brand-dark',
+        light: 'chatbox-brand-light',
+      }),
+      'chatbox-success-text': virtualColor({
+        name: 'chatbox-success-text',
+        dark: 'chatbox-success-dark',
+        light: 'chatbox-success-light',
+      }),
+      'chatbox-error-text': virtualColor({
+        name: 'chatbox-error-text',
+        dark: 'chatbox-error-dark',
+        light: 'chatbox-error-light',
+      }),
+      'chatbox-warning-text': virtualColor({
+        name: 'chatbox-warning-text',
+        dark: 'chatbox-warning-dark',
+        light: 'chatbox-warning-light',
+      }),
+
+      // Border outline variants
+      'chatbox-border-primary-outline': [
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+      ],
+      'chatbox-border-secondary-outline': [
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+        'var(--mantine-color-gray-5)',
+      ],
+
+      // Brand outline variant
+      'chatbox-brand-outline': virtualColor({
+        name: 'chatbox-brand-outline',
+        dark: 'chatbox-brand-dark',
+        light: 'chatbox-brand-light',
+      }),
+
+      // Background secondary text variant (seems to be used as background)
+      'chatbox-background-secondary-text': [
+        'var(--mantine-color-dark-6)',
+        'var(--mantine-color-dark-6)',
+        'var(--mantine-color-dark-6)',
+        'var(--mantine-color-dark-6)',
+        'var(--mantine-color-dark-6)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+        'var(--mantine-color-gray-0)',
+      ],
+
+      // Tertiary outline variant
+      'chatbox-tertiary-outline': [
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-4)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
+        'var(--mantine-color-gray-6)',
       ],
     },
     headings: {
@@ -533,9 +666,14 @@ const creteMantineTheme = (scale = 1) =>
           size: 'sm',
         },
         styles: (_, props) => ({
+          icon: {
+            color: props.checked
+              ? 'var(chatbox-brand)'
+              : 'transparent',
+          },
           label: {
             color: props.checked
-              ? 'var(--mantine-color-chatbox-primary-text)'
+              ? 'var(--mantine-color-chatbox-primary)'
               : 'var(--mantine-color-chatbox-tertiary-text)',
           },
         }),
@@ -571,6 +709,7 @@ const creteMantineTheme = (scale = 1) =>
       }),
     },
   })
+}
 
 export const Route = createRootRoute({
   component: () => {
@@ -581,15 +720,18 @@ export const Route = createRootRoute({
     useScreenChange()
     const theme = useAppTheme()
     const _theme = useAtomValue(atoms.themeAtom)
+    const _colorMode = useAtomValue(atoms.colorModeAtom)
+    const _realTheme = useAtomValue(atoms.realThemeAtom)
     const settings = useAtomValue(atoms.settingsAtom)
     const scale = settings.fontSize / 14
-    const mantineTheme = useMemo(() => creteMantineTheme(scale), [scale])
+    
+    const mantineTheme = useMemo(() => creteMantineTheme(scale, _theme, _colorMode || ColorMode.System, _realTheme), [scale, _theme, _colorMode, _realTheme])
 
     return (
       <QueryClientProvider client={queryClient}>
         <MantineProvider
           theme={mantineTheme}
-          defaultColorScheme={_theme === Theme.Dark ? 'dark' : _theme === Theme.Light ? 'light' : 'auto'}
+          defaultColorScheme={_colorMode === ColorMode.Dark ? 'dark' : 'light'}
         >
           <ThemeProvider theme={theme}>
             <CssBaseline />
@@ -605,10 +747,18 @@ export const Route = createRootRoute({
 
 type ExtendedCustomColors =
   | 'chatbox-brand'
+  | 'chatbox-brand-light'
+  | 'chatbox-brand-dark'
   | 'chatbox-gray'
   | 'chatbox-success'
+  | 'chatbox-success-light'
+  | 'chatbox-success-dark'
   | 'chatbox-error'
+  | 'chatbox-error-light'
+  | 'chatbox-error-dark'
   | 'chatbox-warning'
+  | 'chatbox-warning-light'
+  | 'chatbox-warning-dark'
   | 'chatbox-primary'
   | 'chatbox-secondary'
   | 'chatbox-tertiary'
