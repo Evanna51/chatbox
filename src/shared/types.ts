@@ -194,7 +194,11 @@ export type SessionSettings = Partial<{
   autoSummarize: boolean // 启用自动总结功能
   autoSummarizeMessageThreshold: number // 触发总结的消息数量阈值
   autoSummarizeTokenThreshold: number // 触发总结的token数量阈值
+  autoSummarizeIdleMs?: number // 空闲兜底触发总结的时间（毫秒）
   enableProactiveNotification: boolean // 启用主动通知功能（仅对Character类型会话有效）
+  // 上下文装载策略
+  contextRecentSummaryCount?: number // 注入到上下文的最近[AUTO SUMMARY]系统总结条数
+  contextRecentOriginalCount?: number // 注入到上下文的最近原始对话条数（user/assistant）
 }>
 
 export interface Session {

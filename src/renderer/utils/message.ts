@@ -132,13 +132,21 @@ export function fixMessageRoleSequence(messages: Message[]): Message[] {
  * @returns
  */
 export function sequenceMessages(msgs: Message[]): Message[] {
+  // 将带有 [AUTO SUMMARY] 标记的 system 消息在请求阶段转换为 user，避免被合并到系统提示中
+  const normalizedMsgs = msgs.map((m) => {
+    if (m.role === 'system' && /\[AUTO SUMMARY\]/.test(getMessageText(m))) {
+      return { ...m, role: 'user' as const }
+    }
+    return m
+  })
+
   // Merge all system messages first
   let system: Message = {
     id: '',
     role: 'system',
     contentParts: [],
   }
-  for (const msg of msgs) {
+  for (const msg of normalizedMsgs) {
     if (msg.role === 'system') {
       system = mergeMessages(system, msg)
     }
@@ -151,25 +159,31 @@ export function sequenceMessages(msgs: Message[]): Message[] {
     contentParts: [],
   }
   let isFirstUserMsg = true // Special handling for the first user message
-  for (const msg of msgs) {
+  const isAutoSummary = (m: Message) => /\[AUTO SUMMARY\]/.test(getMessageText(m))
+  for (const msg of normalizedMsgs) {
     // Skip the already processed system messages or empty messages
     if (msg.role === 'system' || isEmptyMessage(msg)) {
       continue
     }
     // Merge consecutive messages from the same role
     if (msg.role === next.role) {
-      next = mergeMessages(next, msg)
-      continue
+      // 如果包含自动总结，强制边界，不进行合并
+      if (isAutoSummary(msg) || isAutoSummary(next)) {
+        if (!isEmptyMessage(next)) {
+          ret.push(next)
+          isFirstUserMsg = false
+        }
+        next = msg
+        continue
+      } else {
+        next = mergeMessages(next, msg)
+        continue
+      }
     }
-    // Merge all assistant messages as a quote block if constructing the first user message
+    // 不再将首条 assistant 折叠为用户引用，避免把助手内容放进 user 的 content 里
     if (isEmptyMessage(next) && isFirstUserMsg && msg.role === 'assistant') {
-      const quote =
-        getMessageText(msg)
-          .split('\n')
-          .map((line) => `> ${line}`)
-          .join('\n') + '\n'
-      msg.contentParts = [{ type: 'text', text: quote }]
-      next = mergeMessages(next, msg)
+      // 直接作为独立的 assistant 消息加入序列
+      ret.push(msg)
       continue
     }
     // If not the first user message, add the current message to the result and start a new one

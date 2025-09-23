@@ -5,6 +5,12 @@ import { MemoryCollection, AnalysisConfig } from './types'
 export * from './types'
 export * from './analyzer'
 
+// 在导出 JSON 时移除无关字段
+function omitInternalKeysReplacer(key: string, value: any) {
+  if (key === 'id' || key === 'source') return undefined
+  return value
+}
+
 /**
  * 检查会话是否是Character类型的AI搭档对话（保留用于兼容性）
  */
@@ -34,7 +40,7 @@ export async function analyzeSession(
  * 导出为JSON格式
  */
 export function exportMemoryCollectionAsJSON(collection: MemoryCollection): string {
-  return JSON.stringify(collection, null, 2)
+  return JSON.stringify(collection, omitInternalKeysReplacer, 2)
 }
 
 /**
@@ -45,7 +51,7 @@ export function exportMemoryCollectionsAsJSON(collections: MemoryCollection[]): 
     exportedAt: Date.now(),
     totalSessions: collections.length,
     collections,
-  }, null, 2)
+  }, omitInternalKeysReplacer, 2)
 }
 
 /**
@@ -67,7 +73,7 @@ export function exportConversationSummaryAsJSON(collection: MemoryCollection): s
       analyzedMessages: collection.analyzedMessages,
       collectedAt: collection.collectedAt,
     }
-  }, null, 2)
+  }, omitInternalKeysReplacer, 2)
 }
 
 /**
@@ -89,7 +95,7 @@ export function exportNovelOutlineAsJSON(collection: MemoryCollection): string {
       analyzedMessages: collection.analyzedMessages,
       collectedAt: collection.collectedAt,
     }
-  }, null, 2)
+  }, omitInternalKeysReplacer, 2)
 }
 
 /**

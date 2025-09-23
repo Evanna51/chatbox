@@ -26,12 +26,20 @@ import {
   IconRefresh,
   IconBug,
   IconSettings,
-  IconEdit
+  IconEdit,
+  IconAlertTriangle,
+  IconFileText,
+  IconPuzzle,
+  IconLoader2,
+  IconX,
+  IconListDetails,
+  IconStars
 } from '@tabler/icons-react'
 import { toast } from 'sonner'
 import platform from '@/platform'
 import type { KnowledgeBase, KnowledgeBaseFile } from 'src/shared/types'
 import { MobileModelSelector, MobileModelDisplay } from './MobileModelSelector'
+import ChunksPreviewModal from './ChunksPreviewModal'
 
 export default function MobileKnowledgeBase() {
   const { t } = useTranslation()
@@ -59,6 +67,10 @@ export default function MobileKnowledgeBase() {
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [permissionStatus, setPermissionStatus] = useState<'checking' | 'granted' | 'denied' | 'unknown'>('checking')
   const [controllerType, setControllerType] = useState<'SQLite' | 'LocalStorage' | 'Unknown'>('Unknown')
+
+  // 分块预览
+  const [chunksModalOpen, setChunksModalOpen] = useState(false)
+  const [chunksFile, setChunksFile] = useState<KnowledgeBaseFile | null>(null)
 
   const knowledgeBaseController = platform.getKnowledgeBaseController()
 
@@ -293,6 +305,11 @@ export default function MobileKnowledgeBase() {
     fetchFiles(kb.id)
   }
 
+  const openChunks = (file: KnowledgeBaseFile) => {
+    setChunksFile(file)
+    setChunksModalOpen(true)
+  }
+
   // 调试工具：检查数据库状态
   const debugDatabase = async () => {
     if (!selectedKb) {
@@ -439,8 +456,8 @@ export default function MobileKnowledgeBase() {
 
       {/* 权限状态提示 */}
       {permissionStatus === 'checking' && (
-        <Alert color="yellow" mb="md">
-          🔍 {t('Checking storage permissions...')}
+        <Alert color="yellow" mb="md" icon={<IconSearch size={16} />}>
+          {t('Checking storage permissions...')}
         </Alert>
       )}
       
@@ -461,8 +478,8 @@ export default function MobileKnowledgeBase() {
       )}
       
       {permissionStatus === 'unknown' && (
-        <Alert color="orange" mb="md">
-          ⚠️ {t('Unable to check permissions. Some features may not work properly.')}
+        <Alert color="orange" mb="md" icon={<IconAlertTriangle size={16} />}>
+          {t('Unable to check permissions. Some features may not work properly.')}
         </Alert>
       )}
 
@@ -661,14 +678,20 @@ export default function MobileKnowledgeBase() {
                           {Math.round(file.file_size / 1024)} KB • {file.mime_type}
                         </Text>
                         {(file as any).summary && (
-                          <Text size="xs" c="dimmed" lineClamp={2} mt={4}>
-                            📄 {(file as any).summary}
-                          </Text>
+                          <Group gap={6} mt={4}>
+                            <IconFileText size={14} color="var(--mantine-color-dimmed)" />
+                            <Text size="xs" c="dimmed" lineClamp={2}>
+                              {(file as any).summary}
+                            </Text>
+                          </Group>
                         )}
                         {(file as any).chunk_count > 1 && (
-                          <Text size="xs" c="blue" mt={2}>
-                            🧩 {(file as any).chunk_count} 个智能分块
-                          </Text>
+                          <Group gap={6} mt={2}>
+                            <IconPuzzle size={14} color="var(--mantine-color-blue-6)" />
+                            <Text size="xs" c="blue">
+                              {(file as any).chunk_count} 个智能分块
+                            </Text>
+                          </Group>
                         )}
                       </Box>
                     </Group>
@@ -682,12 +705,35 @@ export default function MobileKnowledgeBase() {
                         }
                         size="sm"
                       >
-                        {file.status === 'processing' ? '🤖 AI处理中' : 
-                         file.status === 'completed' ? (
-                           (file as any).ai_processed ? '✨ AI增强' : '✅ 完成'
-                         ) : 
-                         file.status === 'failed' ? '❌ 失败' : file.status}
+                        {file.status === 'processing' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <IconLoader2 size={12} /> AI处理中
+                          </span>
+                        ) : file.status === 'completed' ? (
+                          (file as any).ai_processed ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <IconStars size={12} /> AI增强
+                            </span>
+                          ) : (
+                            '完成'
+                          )
+                        ) : file.status === 'failed' ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <IconX size={12} /> 失败
+                          </span>
+                        ) : (
+                          file.status
+                        )}
                       </Badge>
+                      <ActionIcon
+                        color="blue"
+                        variant="subtle"
+                        onClick={() => openChunks(file)}
+                        disabled={loading}
+                        title={String(t('View Chunks'))}
+                      >
+                        <IconListDetails size={16} />
+                      </ActionIcon>
                       
                       <ActionIcon
                         color="red"
@@ -785,7 +831,7 @@ export default function MobileKnowledgeBase() {
             
             <Alert color="yellow" icon={<IconInfoCircle size={16} />}>
               <Text size="sm">
-                ⚠️ {t('Note')}: {t('Changing the embedding model may affect existing search results. The rerank and vision models can be changed safely.')}
+                {t('Note')}: {t('Changing the embedding model may affect existing search results. The rerank and vision models can be changed safely.')}
               </Text>
             </Alert>
             
@@ -808,6 +854,13 @@ export default function MobileKnowledgeBase() {
           </Stack>
         </ScrollArea.Autosize>
       </Modal>
+
+      <ChunksPreviewModal
+        opened={chunksModalOpen}
+        onClose={() => setChunksModalOpen(false)}
+        file={chunksFile}
+        knowledgeBaseId={selectedKb?.id}
+      />
     </Box>
   )
 }

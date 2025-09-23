@@ -38,6 +38,18 @@ export interface ConversationSummary {
   }
   conversationFlow: string // 对话流程总结
   conclusions: string[] // 对话结论
+  // 下面字段为增强项，用于与“自动总结对话”风格对齐（可选）
+  summary?: string // 总览性总结（更短）
+  keyPoints?: string[] // 关键要点
+  userHighlights?: string[] // 用户的目标/决策/约束等要点
+  timestamp?: number // 生成时间戳
+  timeline?: Array<{
+    index: number // 原始消息序号（从1开始）
+    role: 'user' | 'assistant' | 'system' | 'tool'
+    time?: string | number // ISO或数字时间戳
+    brief: string // 单行摘要（压缩且高信息密度）
+    type?: 'user_intent' | 'ai_answer' | 'clarification' | 'decision' | 'other'
+  }>
 }
 
 // 小说大纲分析结果

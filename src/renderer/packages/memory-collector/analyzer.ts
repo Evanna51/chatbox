@@ -48,7 +48,7 @@ export class MemoryAnalyzer {
           break
         
         default:
-          // 默认模式：使用AI统一分析所有消息
+          // 默认模式：使用AI统一分析User的所有消息
           console.log(`统一分析模式: 共 ${messages.length} 条消息`)
           try {
             const unifiedResults = await this.analyzeAllMessagesUnified(messages)
@@ -109,15 +109,16 @@ export class MemoryAnalyzer {
     const memories: MemoryItem[] = []
     const events: EventItem[] = []
 
-    // 构建完整的对话上下文
+    // 构建带时间戳的对话上下文，保留顺序，便于生成时间线
     const conversationContext = messages.map((msg, index) => {
       const text = getMessageText(msg)
-      if (!text || text.trim().length < 10) {
+      if (!text || text.trim().length < 1) {
         return null
       }
-      const role = msg.role === 'user' ? 'user' : 'assistant'
-      return `${index + 1}. 【${role}】: ${text}`
-    }).filter(Boolean).join('\n\n')
+      const role = msg.role
+      const ts = (msg as any).timestamp ? new Date((msg as any).timestamp).toISOString() : 'NA'
+      return `${index + 1}. [${ts}] ${role}: ${text}`
+    }).filter(Boolean).join('\n')
 
     if (!conversationContext.trim()) {
       return { memories, events }
@@ -139,6 +140,7 @@ export class MemoryAnalyzer {
    * 从统一的对话上下文中提取记忆信息
    */
   private async extractMemoriesFromUnifiedContext(messages: Message[], conversationContext: string): Promise<MemoryItem[]> {
+
     const memoryTypesDescription = this.config.enabledMemoryTypes.map(type => {
       switch (type) {
         case 'personal': return 'personal: name, identity, background, basic_info'
@@ -161,6 +163,7 @@ ANALYSIS_RULES:
    - 0.5-0.6: implied_info_or_tendencies
    - filter_out(confidence < 0.5)
 4. for_complete_conversation.avoid_duplicate_similar_info()
+5. downgrade_assistant_generated_content_confidence(to_lowest=true); only treat USER-originated facts as reliable
 
 MEMORY_TYPES:
 - ${memoryTypesDescription}
@@ -194,6 +197,7 @@ return [] if no_valuable_memory_found`)
     } : this.settings!
     
     const model = getModel(analysisSettings, configs, dependencies)
+    // 
     const coreMessages = await convertToCoreMessages([prompt], {
       modelSupportVision: model.isSupportVision(),
     })
@@ -221,11 +225,16 @@ return [] if no_valuable_memory_found`)
         const sourceIndex = aiMemory.sourceIndex || 1
         const sourceMessage = messages[sourceIndex - 1] || messages[0]
         
+        // 将 assistant 源的记忆置信度降到最低，便于后续基于 minConfidence 过滤
+        const adjustedConfidence = sourceMessage.role === 'assistant'
+          ? Math.min(aiMemory.confidence, 0.5)
+          : aiMemory.confidence
+
         memories.push(this.createMemoryItem(
           aiMemory.type,
           aiMemory.content,
           sourceMessage,
-          aiMemory.confidence,
+          adjustedConfidence,
           aiMemory.tags || []
         ))
       }
@@ -257,6 +266,7 @@ ANALYSIS_RULES:
 3. classify_event_types_accurately(avoid_ambiguous_classification=true)
 4. participants.should_be_explicit(), outcome.should_be_objective()
 5. for_complete_conversation.focus_on(temporal_sequence=true, causal_relationships=true)
+6. downgrade_assistant_generated_content_confidence(to_lowest=true); prefer user-originated facts
 
 EVENT_TYPE_STANDARDS:
 - ${eventTypesDescription}
@@ -319,6 +329,11 @@ return [] if no_meaningful_events_found`)
         const sourceIndex = aiEvent.sourceIndex || 1
         const sourceMessage = messages[sourceIndex - 1] || messages[0]
         
+        // 当最小置信度 > 0.5 时，过滤掉来源为 assistant 的事件
+        if (this.config.minConfidence > 0.5 && sourceMessage.role === 'assistant') {
+          continue
+        }
+
         events.push(this.createEventItem(
           aiEvent.type,
           aiEvent.title,
@@ -333,102 +348,6 @@ return [] if no_meaningful_events_found`)
 
     return events
   }
-
-  /**
-   * 使用AI智能提取记忆信息（单条消息，保留用于兼容）
-   */
-//   private async extractMemoriesWithAI(message: Message, text: string): Promise<MemoryItem[]> {
-//     if (!this.settings) {
-//       throw new Error('Settings not provided for AI analysis')
-//     }
-
-//     const memoryTypesDescription = this.config.enabledMemoryTypes.map(type => {
-//       switch (type) {
-//         case 'personal': return '个人信息：姓名、身份、背景、基本情况等'
-//         case 'preference': return '偏好信息：喜好、观点、态度、倾向等'
-//         case 'skill': return '技能信息：能力、专长、经验、学习内容等'
-//         case 'relationship': return '关系信息：家人、朋友、同事、社交关系等'
-//         case 'other': return '其他信息：不属于上述类别的重要个人信息'
-//         default: return type
-//       }
-//     }).join('\n- ')
-
-//     const prompt = createMessage('user', `你是一个专业的对话分析专家，请从以下对话消息中提取重要的个人记忆信息。
-
-// 分析原则：
-// 1. 只提取明确表达的、有价值的个人信息，避免推测或假设
-// 2. 记忆内容应该是可以用于后续对话的有用信息
-// 3. 置信度反映信息的明确程度和重要性：
-//    - 0.9-1.0: 非常明确的个人信息（姓名、职业、明确的技能等）
-//    - 0.7-0.8: 比较明确的偏好或经验
-//    - 0.5-0.6: 暗示性的信息或倾向
-//    - 低于0.5的信息应该被过滤掉
-
-// 记忆类型说明：
-// - ${memoryTypesDescription}
-
-// 消息内容：
-// 【${message.role === 'user' ? 'user' : 'assistant'}】: ${text}
-
-// 输出要求：严格按照以下JSON数组格式输出，不要添加任何其他文字：
-// [
-//   {
-//     "type": "记忆类型",
-//     "content": "记忆的简洁但完整描述",
-//     "confidence": 置信度数值,
-//     "tags": ["标签1", "标签2"]
-//   }
-// ]
-
-// 如果没有发现有价值的记忆信息，请返回空数组 []`)
-
-//     const dependencies = await createModelDependencies()
-//     const configs = { uuid: '' }
-    
-//     // 使用总结模型进行分析，如果没有配置则使用默认模型
-//     const analysisSettings = this.settings!.summaryModel ? {
-//       ...this.settings!,
-//       provider: this.settings!.summaryModel.provider,
-//       modelId: this.settings!.summaryModel.model,
-//     } : this.settings!
-    
-//     const model = getModel(analysisSettings, configs, dependencies)
-//     const coreMessages = await convertToCoreMessages([prompt], {
-//       modelSupportVision: model.isSupportVision(),
-//     })
-
-//     const result = await model.chat(coreMessages, {})
-//     const responseText = result.contentParts
-//       .filter((part) => part.type === 'text')
-//       .map((part) => part.text)
-//       .join('')
-    
-//     // 解析AI返回的JSON
-//     let aiMemories: any[]
-//     try {
-//       // 尝试解析JSON，支持markdown代码块格式
-//       const jsonText = responseText.replace(/```json\n?|\n?```/g, '').trim()
-//       aiMemories = JSON.parse(jsonText)
-//     } catch (error) {
-//       throw new Error(`AI返回的不是有效JSON格式: ${responseText}`)
-//     }
-
-//     // 转换为MemoryItem格式
-//     const memories: MemoryItem[] = []
-//     for (const aiMemory of aiMemories) {
-//       if (aiMemory.type && aiMemory.content && typeof aiMemory.confidence === 'number') {
-//         memories.push(this.createMemoryItem(
-//           aiMemory.type,
-//           aiMemory.content,
-//           message,
-//           aiMemory.confidence,
-//           aiMemory.tags || []
-//         ))
-//       }
-//     }
-
-//     return memories
-//   }
 
 
   /**
@@ -565,34 +484,45 @@ return [] if no_meaningful_events_found`)
       throw new Error('没有有效的对话内容可以分析')
     }
 
-    const prompt = createMessage('user', `Analyze conversation data comprehensively, focusing on content and emotional information.
+    const prompt = createMessage('user', `请基于以下对话完整生成“压缩且结构化”的总结，重点保留事件时间线：
 
-ANALYSIS_REQUIREMENTS:
-1. extract_main_topics_and_key_information_points()
-2. analyze_overall_emotional_tone_and_participant_emotional_states()
-3. summarize_conversation_flow_and_main_conclusions()
-4. describe_emotional_changes_and_conversation_dynamics(objective=true, accurate=true)
+目标：
+1) 强力压缩 assistant 的冗长输出，仅保留结论/答案/关键参数；
+2) 完整记录 user 的主动输出、意图、决策与约束条件；
+3) 生成严格按时间顺序的 timeline（事件时间线），用于快速回溯；
+4) 输出可直接用于继续对话的关键上下文；
+5) 补充情绪分析与对话流程，保留必要细节但简洁表达。
 
-CONVERSATION_DATA (${messages.length} messages):
-${conversationContext}
-
-IMPORTANT: Output all content in Chinese language.
-
-OUTPUT_FORMAT (strict JSON, no additional text):
+输出 JSON（严格 JSON，无多余文本）：
 {
-  "mainTopics": ["main_topic_1", "main_topic_2", "main_topic_3"],
-  "keyInformation": ["key_info_point_1", "key_info_point_2", "key_info_point_3"],
-  "emotionalTone": {
-    "overall": "positive|negative|neutral|mixed",
-    "details": "detailed_emotional_description_including_changes_and_characteristics"
-  },
-  "participantMoods": {
-    "user": "user_emotional_state_and_characteristics_description",
-    "assistant": "assistant_emotional_state_and_characteristics_description"
-  },
-  "conversationFlow": "conversation_flow_summary_including_start_development_end_process",
-  "conclusions": ["conversation_conclusion_1", "conversation_conclusion_2", "conversation_conclusion_3"]
-}`)
+  "summary": "对话主线与结论的概述（尽量短）",
+  "keyPoints": ["关键要点，动词开头，按重要性排序"],
+  "userHighlights": ["用户目标/决策/约束等关键点"],
+  "timestamp": 1680000000000,
+  "timeline": [
+    {
+      "index": 1,
+      "role": "user|assistant|system|tool",
+      "time": "ISO或数字时间戳，可省略",
+      "brief": "该条消息单行摘要：user≤120字，assistant≤60字",
+      "type": "user_intent|ai_answer|clarification|decision|other"
+    }
+  ],
+  "mainTopics": ["..."],
+  "keyInformation": ["..."],
+  "emotionalTone": { "overall": "positive|negative|neutral|mixed", "details": "..." },
+  "participantMoods": { "user": "...", "assistant": "..." },
+  "conversationFlow": "开端-发展-高潮-结尾的简要流程",
+  "conclusions": ["...", "..."]
+}
+
+注意：
+- 对 assistant 的长文本务必强力压缩，允许合并相近多段输出；
+- timeline 必须保留原始顺序，尽量包含时间信息；
+- 仅返回 JSON，不要任何多余文字或解释。
+
+对话历史（含时间戳，共 ${messages.length} 条）：
+${conversationContext}`)
 
     const dependencies = await createModelDependencies()
     const configs = { uuid: '' }

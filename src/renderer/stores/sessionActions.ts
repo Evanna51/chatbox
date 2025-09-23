@@ -456,6 +456,10 @@ export function insertMessageAfter(sessionId: string, msg: Message, afterMsgId: 
   }
   msg.wordCount = countMessageWords(msg)
   msg.tokenCount = estimateTokensFromMessages([msg])
+  // 更新总结元数据（仅对用户和助手消息）
+  if (msg.role === 'user' || msg.role === 'assistant') {
+    updateSummaryMetadata(session, [msg])
+  }
   let hasHandled = false
   const handle = (msgs: Message[]) => {
     const index = msgs.findIndex((m) => m.id === afterMsgId)
@@ -1125,6 +1129,9 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
     autoSummarize,
     autoSummarizeMessageThreshold,
     autoSummarizeTokenThreshold,
+    autoSummarizeIdleMs,
+    contextRecentSummaryCount,
+    contextRecentOriginalCount,
   } = settings
   if (msgs.length === 0) {
     throw new Error('No messages to replay')
@@ -1151,6 +1158,8 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
     autoSummarize,
     autoSummarizeMessageThreshold,
     autoSummarizeTokenThreshold,
+    maxContextMessageCount,
+    autoSummarizeIdleMs,
   })) {
     // 延迟执行总结，等待当前消息生成完成后再开始
     setTimeout(async () => {
@@ -1177,14 +1186,11 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
         const head = currentMsgs[0]?.role === 'system' ? currentMsgs[0] : undefined
         const conversationMsgs = head ? currentMsgs.slice(1) : currentMsgs
         
-        // 计算需要总结的消息范围
+        // 计算需要总结的消息范围（按固定块大小进行增量总结）
         const lastSummaryIndex = currentSession.summaryMetadata?.lastSummaryIndex ?? -1
         const startIndex = lastSummaryIndex + 1
-        
-        // 保留最近的消息不被总结（基于上下文限制）
-        const keepRecentCount = Math.min(maxContextMessageCount / 2, 5)
-        const endIndex = Math.max(startIndex, conversationMsgs.length - keepRecentCount)
-        
+        const chunkSize = Math.max(8, Math.min(20, Math.floor((maxContextMessageCount || 16) / 2)))
+        const endIndex = Math.min(conversationMsgs.length, startIndex + chunkSize)
         const messagesToSummarize = conversationMsgs.slice(startIndex, endIndex)
         
         if (messagesToSummarize.length > 0) {
@@ -1204,13 +1210,19 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
           try {
             // 查找之前的总结内容
             let previousSummary: string | null = null
-            const existingSummaryMsg = conversationMsgs.find(msg => 
-              msg.role === 'system' && getMessageText(msg).includes('[对话历史总结]')
+            const existingSummaryMsg = [...conversationMsgs].reverse().find(msg =>
+              msg.role === 'system' && (/\[AUTO SUMMARY\]/.test(getMessageText(msg)) || /\[对话历史总结\]/.test(getMessageText(msg)))
             )
             if (existingSummaryMsg) {
               const summaryText = getMessageText(existingSummaryMsg)
-              const summaryMatch = summaryText.match(/主要内容：\n([\s\S]*?)\n\n关键要点：/)
-              previousSummary = summaryMatch ? summaryMatch[1] : null
+              // 优先解析新格式
+              const newFormatMatch = summaryText.match(/\*\*Summary:\*\*[\r\n]+([\s\S]*?)(?:[\r\n]+\*\*Key Points:\*\*|$)/)
+              if (newFormatMatch) {
+                previousSummary = newFormatMatch[1].trim()
+              } else {
+                const oldFormatMatch = summaryText.match(/主要内容：\n([\s\S]*?)\n\n关键要点：/)
+                previousSummary = oldFormatMatch ? oldFormatMatch[1] : null
+              }
             }
             
             // 执行增量总结 - 简化进度回调，减少UI更新
@@ -1228,6 +1240,7 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
                 modifyMessage(sessionId, tempSummaryMsg)
               }
             })
+            summaryData.range = { startIndex, endIndex: endIndex - 1 }
             
             // 完成总结后，移除临时状态消息并添加总结系统消息
             if (sessionId && tempSummaryMsg) {
@@ -1261,37 +1274,51 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
     console.log('Using original messages for current generation, summarization will run after delay')
   }
 
-  const head = msgs[0].role === 'system' ? msgs[0] : undefined
-  if (head) {
-    msgs = msgs.slice(1)
-  }
-  let _totalLen = head ? estimateTokensFromMessages([head]) : 0
-  let prompts: Message[] = []
-  for (let i = msgs.length - 1; i >= 0; i--) {
-    let msg = msgs[i]
-    // 跳过错误消息
-    if (msg.error || msg.errorCode) {
+  // 组装上下文：优先装入最近的自动总结 + 最近的原始消息
+  const recentSummaryCount = Math.max(0, contextRecentSummaryCount ?? 3)
+  const recentOriginalCount = Math.max(0, contextRecentOriginalCount ?? 6)
+
+  const allMessages = msgs
+  // 分离头部系统提示（非自动总结）
+  const head = allMessages[0]?.role === 'system' && !/\[AUTO SUMMARY\]/.test(getMessageText(allMessages[0])) ? allMessages[0] : undefined
+  const bodyMessages = head ? allMessages.slice(1) : allMessages.slice(0)
+
+  const autoSummaryMsgs = bodyMessages.filter(m => m.role === 'system' && /\[AUTO SUMMARY\]/.test(getMessageText(m)))
+  const nonSummaryMsgs = bodyMessages.filter(m => !(m.role === 'system' && /\[AUTO SUMMARY\]/.test(getMessageText(m))))
+
+  const selectedSummaries = autoSummaryMsgs.slice(-recentSummaryCount)
+  const selectedOriginals = nonSummaryMsgs.slice(-recentOriginalCount)
+  // 依据 maxContextMessageCount 再次收窄原始消息为“最新的 cap 条”，避免把最新消息挤掉
+  const cap = Number.isFinite(maxContextMessageCount) ? Math.max(0, maxContextMessageCount) : Number.MAX_SAFE_INTEGER
+  const limitedOriginals = cap < Number.MAX_SAFE_INTEGER ? selectedOriginals.slice(-cap) : selectedOriginals
+
+  let basePrompts: Message[] = []
+  if (head) basePrompts.push(head)
+  // 附加最近的自动总结
+  basePrompts.push(...selectedSummaries)
+  // 装载原始消息（已按 cap 收窄，且仍保持时间顺序）
+  basePrompts.push(...limitedOriginals)
+
+  // 回填附件/链接内容与计数（保持与原逻辑一致）
+  // 先处理非总结消息，受 maxContextMessageCount 限制（仅统计 user/assistant）
+  let promptsNonSummary: Message[] = []
+  let nonSummaryCount = 0
+  let _totalLen = 0
+  for (const original of basePrompts) {
+    const isAutoSummary = original.role === 'system' && /\[AUTO SUMMARY\]/.test(getMessageText(original))
+    const isCountable = original.role === 'user' || original.role === 'assistant'
+    if (isCountable && maxContextMessageCount < Number.MAX_SAFE_INTEGER && nonSummaryCount >= maxContextMessageCount) {
       continue
     }
-    const size = estimateTokensFromMessages([msg]) + 20 // 20 作为预估的误差补偿
-    // 只有 OpenAI 才支持上下文 tokens 数量限制
-    if (settings.provider === 'openai') {
-      // if (size + totalLen > openaiMaxContextTokens) {
-      //     break
-      // }
-    }
-    if (
-      maxContextMessageCount < Number.MAX_SAFE_INTEGER &&
-      prompts.length >= maxContextMessageCount + 1 // +1是为了保留用户最后一条输入消息
-    ) {
-      break
-    }
+    let msg = original
+    if (msg.error || msg.errorCode) continue
+    const size = estimateTokensFromMessages([msg]) + 20
 
-    // 如果消息中包含本地文件（消息中携带有本地文件的storageKey），则将文件内容也作为 prompt 的一部分
+    // 附件
     if (msg.files && msg.files.length > 0) {
       for (const [fileIndex, file] of msg.files.entries()) {
         if (file.storageKey) {
-          msg = cloneMessage(msg) // 复制一份消息，避免修改原始消息
+          msg = cloneMessage(msg)
           const content = await storage.getBlob(file.storageKey).catch(() => '')
           if (content) {
             let attachment = `\n\n<ATTACHMENT_FILE>\n`
@@ -1306,11 +1333,11 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
         }
       }
     }
-    // 如果消息中包含本地链接（消息中携带有本地链接的storageKey），则将链接内容也作为 prompt 的一部分
+    // 链接
     if (msg.links && msg.links.length > 0) {
       for (const [linkIndex, link] of msg.links.entries()) {
         if (link.storageKey) {
-          msg = cloneMessage(msg) // 复制一份消息，避免修改原始消息
+          msg = cloneMessage(msg)
           const content = await storage.getBlob(link.storageKey).catch(() => '')
           if (content) {
             let attachment = `\n\n<ATTACHMENT_LINK>\n`
@@ -1326,13 +1353,62 @@ async function genMessageContext(settings: Settings, msgs: Message[], sessionId?
       }
     }
 
-    prompts = [msg, ...prompts]
+    // 统计限制只针对 user/assistant（非总结）
+    if (isCountable) {
+      nonSummaryCount += 1
+    }
+    promptsNonSummary.push(msg)
     _totalLen += size
   }
-  if (head) {
-    prompts = [head, ...prompts]
+
+  // 再处理总结消息（不受限制）
+  let promptsSummary: Message[] = []
+  for (const original of selectedSummaries) {
+    let msg = original
+    if (msg.error || msg.errorCode) continue
+
+    // 附件
+    if (msg.files && msg.files.length > 0) {
+      for (const [fileIndex, file] of msg.files.entries()) {
+        if (file.storageKey) {
+          msg = cloneMessage(msg)
+          const content = await storage.getBlob(file.storageKey).catch(() => '')
+          if (content) {
+            let attachment = `\n\n<ATTACHMENT_FILE>\n`
+            attachment += `<FILE_INDEX>File ${fileIndex + 1}</FILE_INDEX>\n`
+            attachment += `<FILE_NAME>${file.name}</FILE_NAME>\n`
+            attachment += '<FILE_CONTENT>\n'
+            attachment += `${content}\n`
+            attachment += '</FILE_CONTENT>\n'
+            attachment += `</ATTACHMENT_FILE>\n`
+            msg = mergeMessages(msg, createMessage(msg.role, attachment))
+          }
+        }
+      }
+    }
+    // 链接
+    if (msg.links && msg.links.length > 0) {
+      for (const [linkIndex, link] of msg.links.entries()) {
+        if (link.storageKey) {
+          msg = cloneMessage(msg)
+          const content = await storage.getBlob(link.storageKey).catch(() => '')
+          if (content) {
+            let attachment = `\n\n<ATTACHMENT_LINK>\n`
+            attachment += `<LINK_INDEX>${linkIndex + 1}</LINK_INDEX>\n`
+            attachment += `<LINK_URL>${link.url}</LINK_URL>\n`
+            attachment += `<LINK_CONTENT>\n`
+            attachment += `${content}\n`
+            attachment += '</LINK_CONTENT>\n'
+            attachment += `</ATTACHMENT_LINK>\n`
+            msg = mergeMessages(msg, createMessage(msg.role, attachment))
+          }
+        }
+      }
+    }
+    promptsSummary.push(msg)
   }
-  return prompts
+
+  return [...promptsNonSummary, ...promptsSummary]
 }
 
 export function initEmptyChatSession(): Omit<Session, 'id'> {
