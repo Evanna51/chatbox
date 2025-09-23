@@ -170,8 +170,8 @@ export default class MobileExporter implements Exporter {
       .replace(/\s+/g, '_') // 替换空格为下划线
       .substring(0, 50) // 限制文件名长度
 
-    // formart YYYYMMDDHHMMSS
-    const timestamp = new Date().toISOString().replace(/[-:]/g, '').substring(0, 14)
+    // formart YYYYMMDDHH
+    const timestamp = new Date().toISOString().replace(/[-:]/g, '').substring(0, 10)
     return safeFilename+ '_'+ timestamp + '.' + ext
   }
 }

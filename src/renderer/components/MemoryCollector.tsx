@@ -26,7 +26,7 @@ import {
   MenuItem,
 } from '@mui/material'
 import { useTranslation } from 'react-i18next'
-import { Session, CopilotDetail, Message } from '../../shared/types'
+import { Session, CopilotDetail, Message, KnowledgeBase } from '../../shared/types'
 import { useSettings } from '../hooks/useSettings'
 import { 
   analyzeSession,
@@ -37,6 +37,7 @@ import {
   DEFAULT_ANALYSIS_CONFIG
 } from '../packages/memory-collector'
 import { generateSafeFilename } from '../utils'
+import platform from '../platform'
 
 interface MemoryCollectorProps {
   sessions: Session[]
@@ -60,6 +61,10 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
   const [config, setConfig] = useState<AnalysisConfig>(DEFAULT_ANALYSIS_CONFIG)
   const [error, setError] = useState<string | null>(null)
   const [selectedThreadId, setSelectedThreadId] = useState<string>('all_threads')
+  const [kbDialogOpen, setKbDialogOpen] = useState(false)
+  const [kbOptions, setKbOptions] = useState<KnowledgeBase[]>([])
+  const [selectedKbId, setSelectedKbId] = useState<number | ''>('')
+  const [addingToKb, setAddingToKb] = useState(false)
 
   // 检查当前会话是否可以进行话题分析
   const isCurrentSessionAvailable = !!currentSession
@@ -185,18 +190,97 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
       // 生成安全的文件名，限制长度为30个字符（为日期和扩展名留出空间）
       const safeBaseName = generateSafeFilename(baseName, 30)
       // 只保留日期部分 (YYYYMMDD)
-      const dateStr = new Date().toISOString().substring(0, 10).replace(/-/g, '')
-      const filename = `${safeBaseName}-${dateStr}.json`
+      // const dateStr = new Date().toISOString().substring(0, 10).replace(/-/g, '')
+      const filename = `${safeBaseName}.json`
       
-      const blob = new Blob([content], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = filename
-      a.click()
-      URL.revokeObjectURL(url)
+      // 使用平台导出器，兼容移动端（Capacitor）与 Web
+      platform.exporter.exportTextFile(filename, content)
     } catch (error) {
       setError(error instanceof Error ? error.message : '导出失败')
+    }
+  }
+
+  const buildFilenameAndContent = () => {
+    if (!analysisResult) return null
+    const content = exportMemoryCollectionAsJSON(analysisResult)
+    let baseName = ''
+    if (currentSession?.name) {
+      baseName = currentSession.name
+    } else {
+      baseName = analysisResult.copilotName || 'analysis'
+    }
+    if (selectedThreadId && selectedThreadId !== 'all_threads' && currentSession) {
+      let threadName = ''
+      if (selectedThreadId === 'current') {
+        threadName = currentSession.threadName || '当前话题'
+      } else {
+        const selectedThread = currentSession.threads?.find(t => t.id === selectedThreadId)
+        threadName = selectedThread?.name || ''
+      }
+      if (threadName) {
+        baseName = `${baseName}-${threadName}`
+      }
+    }
+    const safeBaseName = generateSafeFilename(baseName, 30)
+    const dateStr = new Date().toISOString().substring(0, 10).replace(/-/g, '')
+    const filename = `${safeBaseName}-${dateStr}.json`
+    return { filename, content }
+  }
+
+  const handleAddToKnowledgeBase = async () => {
+    try {
+      if (!analysisResult) return
+      setError(null)
+      const fc = buildFilenameAndContent()
+      if (!fc) return
+      const { filename, content } = fc
+
+      // 获取知识库列表
+      let controller
+      try {
+        controller = platform.getKnowledgeBaseController()
+      } catch (e) {
+        setError('当前平台不支持知识库')
+        return
+      }
+
+      const list = await controller.list()
+      if (!list || list.length === 0) {
+        setError('请先在知识库页面创建一个知识库')
+        return
+      }
+      if (list.length === 1) {
+        // 直接添加
+        await addJsonToKb(list[0].id, filename, content)
+        return
+      }
+      // 多个知识库，弹出选择
+      setKbOptions(list)
+      setSelectedKbId('')
+      setKbDialogOpen(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '添加到知识库失败')
+    }
+  }
+
+  const addJsonToKb = async (kbId: number, filename: string, content: string) => {
+    try {
+      setAddingToKb(true)
+      const controller = platform.getKnowledgeBaseController()
+      const file = new File([content], filename, { type: 'application/json' })
+      const fileMeta = {
+        name: filename,
+        path: filename,
+        type: 'application/json',
+        size: file.size,
+        _file: file,
+      }
+      await controller.uploadFile(kbId, fileMeta)
+      setKbDialogOpen(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '上传到知识库失败')
+    } finally {
+      setAddingToKb(false)
     }
   }
 
@@ -480,7 +564,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                     </MenuItem> */}
                     {threadOptions.map(option => (
                       <MenuItem key={option.id} value={option.id}>
-                        {option.name} ({option.messageCount} 条消息)
+                        {option.name} ({option.messageCount} 条)
                       </MenuItem>
                     ))}
                   </Select>
@@ -497,12 +581,10 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
             )}
 
             {/* 配置选项 */}
-            <Paper sx={{ p: 2, mb: 2 }}>
-              <Typography variant="subtitle2" gutterBottom>
-                分析配置
-              </Typography>
+            <Box sx={{ mb: 2 }}>
+             
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
-                <FormControl size="small" sx={{ minWidth: 150 }}>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
                   <InputLabel>分析模式</InputLabel>
                   <Select
                     value={config.analysisMode}
@@ -512,7 +594,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                       analysisMode: e.target.value as AnalysisMode
                     }))}
                   >
-                    <MenuItem value="default">默认模式</MenuItem>
+                    <MenuItem value="default">人物模式</MenuItem>
                     <MenuItem value="conversation_summary">对话总结</MenuItem>
                     <MenuItem value="novel_outline">小说大纲</MenuItem>
                   </Select>
@@ -527,7 +609,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                       }))}
                     />
                   }
-                  label="包含系统消息"
+                  label="系统消息"
                 />
                 <TextField
                   label="最小置信度"
@@ -566,7 +648,7 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                   小说大纲模式：将提取小说创作相关的角色、情节、设定等元素
                 </Alert>
               )}
-            </Paper>
+            </Box>
           </Box>
 
           {/* 分析结果显示 */}
@@ -577,9 +659,14 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
                   <Typography variant="h6">
                     {analysisResult.copilotName}
                   </Typography>
-                  <Button onClick={handleExport} variant="outlined" size="small">
-                    导出JSON
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button onClick={handleExport} variant="outlined" size="small">
+                      导出JSON
+                    </Button>
+                    <Button onClick={handleAddToKnowledgeBase} variant="contained" size="small">
+                      添加到知识库
+                    </Button>
+                  </Box>
                 </Box>
                 
                 <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -632,6 +719,39 @@ export function MemoryCollector({ sessions, copilots, currentSession, open: exte
         <DialogActions>
           <Button onClick={handleClose}>
             {t('Close')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* 选择知识库对话框 */}
+      <Dialog open={kbDialogOpen} onClose={() => setKbDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>选择知识库</DialogTitle>
+        <DialogContent>
+          <FormControl size="small" fullWidth sx={{ mt: 1 }}>
+            <InputLabel>知识库</InputLabel>
+            <Select
+              value={selectedKbId}
+              label="知识库"
+              onChange={(e) => setSelectedKbId(Number(e.target.value))}
+            >
+              {kbOptions.map(kb => (
+                <MenuItem key={kb.id} value={kb.id}>{kb.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setKbDialogOpen(false)} disabled={addingToKb}>取消</Button>
+          <Button
+            onClick={async () => {
+              const fc = buildFilenameAndContent()
+              if (!fc || !selectedKbId) return
+              await addJsonToKb(Number(selectedKbId), fc.filename, fc.content)
+            }}
+            variant="contained"
+            disabled={!selectedKbId || addingToKb}
+          >
+            {addingToKb ? <CircularProgress size={18} /> : '添加'}
           </Button>
         </DialogActions>
       </Dialog>

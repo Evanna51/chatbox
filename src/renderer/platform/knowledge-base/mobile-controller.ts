@@ -588,28 +588,17 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
       
       // 存储原始文档内容到 LocalForage
       await this.storage.setItem(contentKey, content)
-      
-      // 先尝试简单的完成状态更新，不进行AI处理
-      console.log(`[Mobile KB] Updating file status to completed for testing`)
-      await this.db.run(
-        `UPDATE kb_file SET status = ?, keywords = ?, summary = ? WHERE id = ?`,
-        ['completed', this.extractKeywords(content), content.slice(0, 200) + '...', fileId]
-      )
-      
-      // 再次验证更新是否成功
-      const finalVerifyResult = await this.db.query('SELECT * FROM kb_file WHERE id = ?', [fileId])
-      console.log(`[Mobile KB] Final verification after update:`, finalVerifyResult.values?.[0])
-      
-      // 使用后备处理方法确保文件被正确分块
-      console.log(`[Mobile KB] Starting fallback processing for file ${fileId}`)
-      this.fallbackFileProcessing(fileId, content).catch(error => {
-        console.error(`[Mobile KB] Fallback processing failed for file ${fileId}:`, error)
-        // 如果后备处理也失败，至少标记为完成状态
-        this.db?.run(
-          `UPDATE kb_file SET status = ?, error = ? WHERE id = ?`,
-          ['failed', String(error), fileId]
-        ).catch(console.error)
-      })
+
+      // 优先使用 AI 处理，设置超时；失败或超时则回退到本地分块
+      console.log(`[Mobile KB] Attempting AI processing for file ${fileId}`)
+      try {
+        await this.withTimeout(this.processFileWithAI(fileId, content, file.name), 20000, 'AI processing')
+        console.log(`[Mobile KB] AI processing succeeded for file ${fileId}`)
+      } catch (aiError) {
+        console.warn(`[Mobile KB] AI processing failed or timed out for file ${fileId}:`, aiError)
+        console.log(`[Mobile KB] Falling back to local chunking for file ${fileId}`)
+        await this.fallbackFileProcessing(fileId, content)
+      }
       
       console.log(`[Mobile KB] File uploaded and processed: ${file.name}`)
     } catch (error) {
@@ -801,11 +790,19 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
       
       // 延迟加载依赖
       await this.loadAIDependencies()
+      console.log('[Mobile KB] AI dependencies loaded')
       
       const settings = settingActions.getSettings()
       const dependencies = await createModelDependencies()
       const configs = { uuid: uuidv4() } // 提供必需的uuid字段
-      const model = getModel(settings, configs, dependencies)
+      let model: any
+      try {
+        model = getModel(settings, configs, dependencies)
+        console.log('[Mobile KB] Model created for AI enhancement')
+      } catch (modelError) {
+        console.error('[Mobile KB] Failed to create model for AI enhancement:', modelError)
+        throw modelError
+      }
 
       // 创建AI处理的消息
       const messages: Message[] = [
@@ -814,16 +811,26 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
           role: 'system',
           contentParts: [{
             type: 'text',
-            text: `你是一个专业的文档分析助手。请分析以下文档内容，并提供：
-1. 文档摘要（100-200字）
-2. 关键词（用空格分隔，10-20个）
-3. 将文档分割成逻辑块（每块300-500字）
+            text: `你是一个专业的文档分块助手。请严格按照以下要求分析并分块：
+1) 返回 JSON，且只能包含这三个字段：summary、keywords、chunks。不得包含注释或多余文本。
+2) summary：用与原文相同语言写 100-200 字的摘要。
+3) keywords：提取 10-20 个关键词，使用空格分隔，保持原文语言。
+4) chunks：将文档按语义分成多个连续片段（数组的每一项为字符串）。要求：
+   - 保留原文，不要改写；保留原有标点与换行；去除片段首尾多余空白。
+   - 优先在句子或段落边界处切分：
+     • 中文使用 [。！？；] 及换行作为边界；
+     • 英文使用 [.?!;] 及换行作为边界；
+     • 混合语言时分别按各自规则切分。
+   - 目标长度：每块约 300-600 字符；最短不少于 120 字符，最长不超过 800 字符。
+   - 允许相邻块有 1-2 句轻微重叠以保证上下文连贯，但避免大段重复。
+   - 按原文顺序覆盖提供的全文，不得跳过或重排内容。
+   - 严禁为英文内容添加中文标点，或为中文内容添加英文标点。
 
-请以JSON格式返回结果：
+输出示例（示意）：
 {
   "summary": "文档摘要",
   "keywords": "关键词1 关键词2 关键词3",
-  "chunks": ["块1内容", "块2内容", "块3内容"]
+  "chunks": ["片段1文本", "片段2文本", "片段3文本"]
 }`
           }]
         },
@@ -832,19 +839,36 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
           role: 'user',
           contentParts: [{
             type: 'text',
-            text: `文件名：${filename}\n\n文档内容：\n${content.slice(0, 8000)}` // 限制长度避免token超限
+            text: `文件名：${filename}\n\n文档内容（请严格按上述规则进行分块，仅返回合法 JSON）：\n${content.slice(0, 8000)}` // 限制长度避免token超限
           }]
         }
       ]
-
+      console.log(`[Mobile KB] Calling generateText for file: ${filename}`)
       const result = await generateText(model, messages)
-      const aiResponse = result.contentParts.find((part: any) => part.type === 'text')?.text || ''
-      
-      console.log(`[Mobile KB] AI response received, length: ${aiResponse.length}`)
+      let aiResponse = ''
+      try {
+        if (result && Array.isArray((result as any).contentParts) && (result as any).contentParts.length > 0) {
+          const allTexts = (result as any).contentParts.filter((p: any) => p && p.type === 'text').map((p: any) => p.text)
+          aiResponse = allTexts.join('\n').trim()
+        } else if (typeof (result as any).text === 'string') {
+          aiResponse = (result as any).text
+        } else if (typeof result === 'string') {
+          aiResponse = result
+        } else {
+          console.warn('[Mobile KB] AI result has unexpected shape:', Object.keys(result || {}))
+        }
+      } catch (shapeError) {
+        console.warn('[Mobile KB] Failed to extract text from AI result:', shapeError)
+      }
+
+      console.log(`[Mobile KB] AI response received, length: ${aiResponse?.length || 0}`)
+      if (aiResponse) {
+        console.log('[Mobile KB] AI response snippet:', aiResponse.slice(0, 200))
+      }
 
       // 尝试解析AI返回的JSON
       try {
-        const parsed = JSON.parse(aiResponse)
+        const parsed = JSON.parse(this.extractJsonString(aiResponse))
         return {
           summary: parsed.summary || content.slice(0, 200) + '...',
           keywords: parsed.keywords || this.extractKeywords(content),
@@ -869,27 +893,97 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
   }
 
   /**
+   * 提取 AI 文本中的 JSON（移除 ```json/``` 包裹，并截取首尾大括号内内容）。
+   */
+  private extractJsonString(text: string): string {
+    if (!text) return ''
+    let cleaned = text
+      .replace(/```json\s*/gi, '')
+      .replace(/```\s*/g, '')
+      .trim()
+    const first = cleaned.indexOf('{')
+    const last = cleaned.lastIndexOf('}')
+    if (first !== -1 && last !== -1 && last > first) {
+      cleaned = cleaned.slice(first, last + 1)
+    }
+    return cleaned
+  }
+
+  /**
+   * 包装一个 Promise，提供超时能力。
+   */
+  private async withTimeout<T>(promise: Promise<T>, timeoutMs: number, label = 'operation'): Promise<T> {
+    return await new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+      }, timeoutMs)
+
+      promise
+        .then((value) => {
+          clearTimeout(timer)
+          resolve(value)
+        })
+        .catch((error) => {
+          clearTimeout(timer)
+          reject(error)
+        })
+    })
+  }
+
+  /**
    * 简单的内容分块方法（作为AI失败时的后备方案）
    */
   private chunkContent(content: string, chunkSize = 500): string[] {
     const chunks: string[] = []
-    const sentences = content.split(/[。！？\n]/).filter(s => s.trim().length > 0)
-    
+    const sentences: string[] = []
+
+    // 1) 将文本按字符扫描，遇到中英文句末标点或换行就切分为一个“句子”
+    const delimiters = new Set(['。', '！', '？', '!', '?', ';', '；', '\n'])
+    let buffer = ''
+    for (let i = 0; i < content.length; i++) {
+      const ch = content[i]
+      buffer += ch
+      if (delimiters.has(ch)) {
+        const s = buffer.trim()
+        if (s.length > 0) sentences.push(s)
+        buffer = ''
+      }
+    }
+    if (buffer.trim().length > 0) sentences.push(buffer.trim())
+
+    // 如果没有有效句子（极端情况），直接返回整体
+    if (sentences.length === 0) return [content]
+
+    // 2) 合并句子到目标大小的块
     let currentChunk = ''
+    const endsWithBoundary = (text: string) => /[。！？!?;；\n]$/.test(text)
+
     for (const sentence of sentences) {
-      if (currentChunk.length + sentence.length > chunkSize && currentChunk.length > 0) {
+      const needsSep = currentChunk.length > 0 && !endsWithBoundary(currentChunk)
+      const separator = needsSep ? ' ' : ''
+      const nextLength = currentChunk.length + (separator ? 1 : 0) + sentence.length
+
+      if (currentChunk.length > 0 && nextLength > chunkSize) {
         chunks.push(currentChunk.trim())
         currentChunk = sentence
       } else {
-        currentChunk += sentence + '。'
+        currentChunk = currentChunk ? currentChunk + separator + sentence : sentence
       }
     }
-    
-    if (currentChunk.trim().length > 0) {
-      chunks.push(currentChunk.trim())
+
+    if (currentChunk.trim().length > 0) chunks.push(currentChunk.trim())
+
+    // 3) 兜底：若仍然只有一个块且过长，按固定宽度硬切避免“同一段文字”问题
+    if (chunks.length === 1 && chunks[0].length > chunkSize * 1.5) {
+      const hardChunks: string[] = []
+      const text = chunks[0]
+      for (let i = 0; i < text.length; i += chunkSize) {
+        hardChunks.push(text.slice(i, i + chunkSize))
+      }
+      return hardChunks
     }
-    
-    return chunks.length > 0 ? chunks : [content]
+
+    return chunks
   }
 
   async deleteFile(fileId: number): Promise<void> {
@@ -1192,23 +1286,28 @@ export default class MobileKnowledgeBaseController implements KnowledgeBaseContr
 
     for (const chunk of chunks) {
       try {
+        // 读取文件名
         const fileResult = await this.db.query(
-          'SELECT filename, content_key FROM kb_file WHERE id = ? AND kb_id = ?',
+          'SELECT filename FROM kb_file WHERE id = ? AND kb_id = ?',
           [chunk.fileId, kbId]
         )
 
-        if (fileResult.values?.[0]) {
-          const { filename, content_key } = fileResult.values[0]
-          const content = await this.storage.getItem<string>(content_key)
+        if (!fileResult.values?.[0]) continue
+        const { filename } = fileResult.values[0]
 
-          if (content) {
-            results.push({
-              fileId: chunk.fileId,
-              filename,
-              chunkIndex: chunk.chunkIndex,
-              text: content,
-            })
-          }
+        // 直接从分块表读取指定分块内容
+        const chunkResult = await this.db.query(
+          'SELECT content FROM kb_file_chunk WHERE file_id = ? AND chunk_index = ? LIMIT 1',
+          [chunk.fileId, chunk.chunkIndex]
+        )
+
+        if (chunkResult.values?.[0]) {
+          results.push({
+            fileId: chunk.fileId,
+            filename,
+            chunkIndex: chunk.chunkIndex,
+            text: chunkResult.values[0].content,
+          })
         }
       } catch (error) {
         console.warn(`[Mobile KB] Failed to read chunk for file ${chunk.fileId}:`, error)

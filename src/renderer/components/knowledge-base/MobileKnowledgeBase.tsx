@@ -635,7 +635,7 @@ export default function MobileKnowledgeBase() {
                   type="file"
                   hidden
                   onChange={uploadFile}
-                  accept=".txt,.md,.json"
+                  accept=".txt,.md,.json,.pdf"
                 />
               </Button>
             </Group>

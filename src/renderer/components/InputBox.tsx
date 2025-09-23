@@ -576,7 +576,7 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     </ActionIcon>
                   </Tooltip>
 
-                  <input type="file" ref={fileInputRef} className="hidden" onChange={onFileInputChange} multiple />
+                  <input type="file" ref={fileInputRef} className="hidden" onChange={onFileInputChange} multiple accept=".txt,.pdf,.json,.md" />
                   <Tooltip label={t('Select File')} withArrow position="top">
                     <ActionIcon size="24px" variant="subtle" color="chatbox-secondary" onClick={onFileUploadClick}>
                       <IconFolder strokeWidth={1.8} />
@@ -687,13 +687,12 @@ const InputBox = forwardRef<InputBoxRef, InputBoxProps>(
                     </Menu.Target>
 
                     <Menu.Dropdown>
+                    <Menu.Item leftSection={<IconFolder size={16} />} onClick={onFileUploadClick}>
+                        {t('Select File')}
+                      </Menu.Item>
                       <Menu.Item leftSection={<IconPhoto size={16} />} onClick={onImageUploadClick}>
                         {t('Attach Image')}
                       </Menu.Item>
-                      <Menu.Item leftSection={<IconFolder size={16} />} onClick={onFileUploadClick}>
-                        {t('Select File')}
-                      </Menu.Item>
-
                       <Menu.Item leftSection={<IconLink size={16} />} onClick={handleAttachLink}>
                         {t('Attach Link')}
                       </Menu.Item>
