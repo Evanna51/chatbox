@@ -4,15 +4,12 @@ import EmojiPicker from '@/components/EmojiPicker'
 import { ImageInStorage, handleImageInputAndSave } from '@/components/Image'
 import Page from '@/components/Page'
 import StyledMenu from '@/components/StyledMenu'
-import { useMyCopilots, useRemoteCopilots } from '@/hooks/useCopilots'
+import { useMyCopilots } from '@/hooks/useCopilots'
 import { useIsSmallScreen } from '@/hooks/useScreenChange'
 import { trackingEvent } from '@/packages/event'
-import * as remote from '@/packages/remote'
 import platform from '@/platform'
-import storage from '@/storage'
 import { StorageKeyGenerator } from '@/storage/StoreStorage'
 import * as atoms from '@/stores/atoms'
-import * as sessionActions from '@/stores/sessionActions'
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline'
 import EditIcon from '@mui/icons-material/Edit'
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions'
@@ -26,22 +23,17 @@ import {
   Button,
   ButtonGroup,
   Card,
-  CardContent,
   Divider,
   FormControl,
-  FormControlLabel,
-  FormGroup,
   IconButton,
   InputLabel,
   MenuItem,
   Select,
   Stack,
-  Switch,
   TextField,
   Typography,
   useTheme,
 } from '@mui/material'
-import { IconPlus } from '@tabler/icons-react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useAtom } from 'jotai'
 import React, { useEffect, useState } from 'react'
@@ -69,7 +61,7 @@ function Copilots() {
   const { t } = useTranslation()
 
   const store = useMyCopilots()
-  const { copilots: remoteCopilots } = useRemoteCopilots()
+  
 
   const handleClose = () => {
     setOpen(false)
@@ -77,9 +69,6 @@ function Copilots() {
 
   const selectCopilot = (detail: CopilotDetail) => {
     const newDetail = { ...detail, usedCount: (detail.usedCount || 0) + 1 }
-    if (newDetail.shared) {
-      remote.recordCopilotShare(newDetail)
-    }
     store.addOrUpdate(newDetail)
 
     navigate({
@@ -142,6 +131,38 @@ function Copilots() {
                 />
               </Box>
             </Box>
+            {/* Actions */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddCircleOutlineIcon />}
+                onClick={async () => {
+                  const empty = await getEmptyCopilot()
+                  setCopilotEdit(empty)
+                }}
+              >
+                {t('Create New Copilot')}
+              </Button>
+            </Box>
+
+            {/* Local Copilots */}
+            <Stack spacing={1}>
+              {list.map((item) => (
+                <MiniItem
+                  key={item.id}
+                  mode="local"
+                  detail={item}
+                  selectMe={() => selectCopilot(item)}
+                  switchStarred={() => {
+                    const updated = { ...item, starred: !item.starred }
+                    store.addOrUpdate(updated)
+                  }}
+                  editMe={() => setCopilotEdit(item)}
+                  deleteMe={() => store.remove(item.id)}
+                />
+              ))}
+            </Stack>
           </>
         )}
 
@@ -586,14 +607,6 @@ function CopilotForm(props: CopilotFormProps) {
       />
       
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <FormGroup row>
-          <FormControlLabel
-            control={<Switch />}
-            label={t('Share with Chatbox')}
-            checked={copilotEdit.shared}
-            onChange={(_e, checked) => setCopilotEdit({ ...copilotEdit, shared: checked })}
-          />
-        </FormGroup>
         <ButtonGroup>
           <Button variant="outlined" onClick={() => props.close()}>
             {t('cancel')}
@@ -618,7 +631,6 @@ export async function getEmptyCopilot(): Promise<CopilotDetail> {
     prompt: CHARACTER_DEFAULT_PROMPT,
     starred: false,
     usedCount: 0,
-    shared: true,
     category: COPILOT_CATEGORIES.CHARACTER,
   }
 }
